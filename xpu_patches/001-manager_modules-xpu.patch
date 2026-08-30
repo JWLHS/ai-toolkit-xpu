@@ -1,0 +1,172 @@
+diff --git a/toolkit/memory_management/manager_modules.py b/toolkit/memory_management/manager_modules.py
+index d559f18..3417888 100644
+--- a/toolkit/memory_management/manager_modules.py
++++ b/toolkit/memory_management/manager_modules.py
+@@ -13,6 +13,7 @@ import torch.nn as nn
+ import torch.nn.functional as F
+ from typing import TYPE_CHECKING, Optional, Tuple
+ from torch.overrides import has_torch_function_unary  # (ADD) torchao detection
++from toolkit.device_utils import is_cuda_available
+ 
+ if TYPE_CHECKING:
+     from .manager import MemoryManager
+@@ -238,10 +239,10 @@ def _ensure_cpu_pinned(t: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+     # Quantized wrappers can't be pin_memory()'d directly, but pinning their
+     # inner storage gives the same async-transfer benefit.
+     if _is_quantized_tensor(t):
+-        if torch.cuda.is_available():
++        if is_cuda_available():
+             _pin_inner_tensors(t)
+         return t
+-    if torch.cuda.is_available():
++    if is_cuda_available():
+         try:
+             t = t.pin_memory()
+         except RuntimeError:
+@@ -302,6 +303,16 @@ class _BouncingLinearFn(torch.autograd.Function):
+             w_gpu = cpu_w.to(dev, non_blocking=True)
+             return w_gpu
+ 
++        # XPU path: simple execution without streams (Unified Memory handles it)
++        if device.type == "xpu":
++            w = _materialize_linear_weight(weight_cpu, device)
++            b = bias_cpu.to(device, non_blocking=True) if bias_cpu is not None else None
++            out = F.linear(x, w.to(x.dtype), b.to(x.dtype) if b is not None else None)
++            ctx.save_for_backward(x, weight_cpu, bias_cpu)
++            ctx.device = device
++            ctx.target_dtype = target_dtype
++            return out
++
+         if device.type != "cuda":
+             out = F.linear(
+                 x.to("cpu"),
+@@ -335,6 +346,42 @@ class _BouncingLinearFn(torch.autograd.Function):
+         device = ctx.device
+         target_dtype = getattr(ctx, "target_dtype", grad_out.dtype)
+ 
++        # XPU path: simple execution
++        if device.type == "xpu":
++            w_mat = (
++                weight_cpu.dequantize()
++                if _is_quantized_tensor(weight_cpu)
++                else weight_cpu
++            )
++            # Ensure weight is on device and correct dtype
++            w_mat = w_mat.to(device)
++            if w_mat.dtype != target_dtype and target_dtype in (
++                torch.bfloat16,
++                torch.float16,
++                torch.float32,
++            ):
++                w_mat = w_mat.to(target_dtype)
++
++            grad_input = grad_out @ w_mat
++            grad_weight = (
++                grad_out.flatten(0, -2).T @ x.flatten(0, -2)
++                if getattr(weight_cpu, "requires_grad", False)
++                and weight_cpu.dtype.is_floating_point
++                else None
++            )
++            grad_bias = (
++                grad_out.sum(dim=tuple(range(grad_out.ndim - 1)))
++                if (bias_cpu is not None and getattr(bias_cpu, "requires_grad", False))
++                else None
++            )
++            # Weights are held on CPU by the memory manager, so grads go to CPU.
++            if grad_weight is not None:
++                grad_weight = grad_weight.to("cpu")
++            if grad_bias is not None:
++                grad_bias = grad_bias.to("cpu")
++
++            return grad_input, grad_weight, grad_bias, None
++
+         if device.type != "cuda":
+             go_cpu = grad_out.to("cpu")
+             x_cpu = x.to("cpu")
+@@ -447,6 +494,15 @@ class _BouncingConv2dFn(torch.autograd.Function):
+             w_gpu = cpu_w.to(dev, non_blocking=True)
+             return w_gpu
+ 
++        # XPU path
++        if device.type == "xpu":
++            w = _materialize_conv_weight(weight_cpu, device)
++            b = bias_cpu.to(device, non_blocking=True) if bias_cpu is not None else None
++            out = F.conv2d(x, w.to(x.dtype), b.to(x.dtype) if b is not None else b, stride, padding, dilation, groups)
++            ctx.save_for_backward(x, weight_cpu, bias_cpu)
++            ctx.meta = (device, stride, padding, dilation, groups, target_dtype)
++            return out
++
+         if device.type != "cuda":
+             out = F.conv2d(
+                 x.to("cpu"),
+@@ -479,6 +535,70 @@ class _BouncingConv2dFn(torch.autograd.Function):
+         x, weight_cpu, bias_cpu = ctx.saved_tensors
+         device, stride, padding, dilation, groups, target_dtype = ctx.meta
+ 
++        # XPU path
++        if isinstance(device, torch.device) and device.type == "xpu":
++            w_cpu = (
++                weight_cpu.dequantize()
++                if _is_quantized_tensor(weight_cpu)
++                else weight_cpu
++            )
++            # Ensure weight is on device
++            w_gpu = w_cpu.to(device)
++            if w_gpu.dtype != target_dtype and target_dtype in (
++                torch.bfloat16,
++                torch.float16,
++                torch.float32,
++            ):
++                w_gpu = w_gpu.to(target_dtype)
++
++            from torch.nn.grad import conv2d_input, conv2d_weight  # type: ignore
++
++            grad_input = conv2d_input(
++                x.shape,
++                w_gpu,
++                grad_out,
++                stride=stride,
++                padding=padding,
++                dilation=dilation,
++                groups=groups,
++            )
++            grad_weight = (
++                conv2d_weight(
++                    x,
++                    w_gpu.shape,
++                    grad_out,
++                    stride=stride,
++                    padding=padding,
++                    dilation=dilation,
++                    groups=groups,
++                )
++                if getattr(weight_cpu, "requires_grad", False)
++                and weight_cpu.dtype.is_floating_point
++                else None
++            )
++            grad_bias = (
++                grad_out.sum(dim=(0, 2, 3))
++                if (bias_cpu is not None and getattr(bias_cpu, "requires_grad", False))
++                else None
++            )
++
++            # Move grads to CPU
++            if grad_weight is not None:
++                grad_weight = grad_weight.to("cpu")
++            if grad_bias is not None:
++                grad_bias = grad_bias.to("cpu")
++
++            return (
++                grad_input.to(grad_out.dtype),
++                grad_weight,
++                grad_bias,
++                None,
++                None,
++                None,
++                None,
++                None,
++            )
++
+         if (
+             isinstance(device, torch.device) and device.type != "cuda"
+         ) or device == "cpu":

@@ -1,0 +1,23 @@
+diff --git a/toolkit/custom_adapter.py b/toolkit/custom_adapter.py
+index de34496..f3506ef 100644
+--- a/toolkit/custom_adapter.py
++++ b/toolkit/custom_adapter.py
+@@ -23,6 +23,7 @@ from toolkit.models.redux import ReduxImageEncoder
+ from toolkit.photomaker import PhotoMakerIDEncoder, FuseModule, PhotoMakerCLIPEncoder
+ from toolkit.saving import load_ip_adapter_model, load_custom_adapter_model
+ from toolkit.train_tools import get_torch_dtype
++from toolkit import device_utils
+ from toolkit.models.pixtral_vision import PixtralVisionEncoderCompatible, PixtralVisionImagePreprocessorCompatible
+ import random
+ from toolkit.util.mask import generate_random_mask
+@@ -210,6 +211,10 @@ class CustomAdapter(torch.nn.Module):
+             self.te_adapter = TEAdapter(self, self.sd_ref(), self.te, self.tokenizer)
+         elif self.adapter_type == 'llm_adapter':
+             kwargs = {}
++            if self.config.quantize_llm:
++                if device_utils.is_xpu_available():
++                    print("Warning: BitsAndBytes 4-bit quantization is not supported on XPU. Disabling quantization for LLM adapter.")
++                    self.config.quantize_llm = False
+             if self.config.quantize_llm:
+                 bnb_kwargs = {
+                     'load_in_4bit': True,

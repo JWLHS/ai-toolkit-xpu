@@ -1,0 +1,42 @@
+diff --git a/toolkit/stable_diffusion_model.py b/toolkit/stable_diffusion_model.py
+index 5421647..0073e34 100644
+--- a/toolkit/stable_diffusion_model.py
++++ b/toolkit/stable_diffusion_model.py
+@@ -66,6 +66,7 @@ from toolkit.models.flux import add_model_gpu_splitter_to_flux, bypass_flux_guid
+ from optimum.quanto import freeze, qfloat8, QTensor, qint4
+ from toolkit.util.quantize import quantize, get_qtype
+ from toolkit.accelerator import get_accelerator, unwrap_model
++from toolkit import device_utils
+ from typing import TYPE_CHECKING
+ from toolkit.print import print_acc
+ from diffusers import FluxFillPipeline
+@@ -507,6 +508,9 @@ class StableDiffusion:
+             te_kwargs = {}
+             # handle quantization of TE
+             te_is_quantized = False
++            if self.model_config.text_encoder_bits in [4, 8] and device_utils.is_xpu_available():
++                print("Warning: 4/8-bit quantization is not supported on XPU. Ignoring quantization.")
++                self.model_config.text_encoder_bits = None
+             if self.model_config.text_encoder_bits == 8:
+                 te_kwargs['load_in_8bit'] = True
+                 te_kwargs['device_map'] = "auto"
+@@ -593,6 +597,9 @@ class StableDiffusion:
+             te_kwargs = {}
+             # handle quantization of TE
+             te_is_quantized = False
++            if self.model_config.text_encoder_bits in [4, 8] and device_utils.is_xpu_available():
++                print("Warning: 4/8-bit quantization is not supported on XPU. Ignoring quantization.")
++                self.model_config.text_encoder_bits = None
+             if self.model_config.text_encoder_bits == 8:
+                 te_kwargs['load_in_8bit'] = True
+                 te_kwargs['device_map'] = "auto"
+@@ -973,6 +980,9 @@ class StableDiffusion:
+                 te_kwargs = {}
+                 # handle quantization of TE
+                 te_is_quantized = False
++                if self.model_config.text_encoder_bits in [4, 8] and device_utils.is_xpu_available():
++                    print("Warning: 4/8-bit quantization is not supported on XPU. Ignoring quantization.")
++                    self.model_config.text_encoder_bits = None
+                 if self.model_config.text_encoder_bits == 8:
+                     te_kwargs['load_in_8bit'] = True
+                     te_kwargs['device_map'] = "auto"

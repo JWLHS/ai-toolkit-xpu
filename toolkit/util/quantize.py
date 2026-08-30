@@ -1,0 +1,476 @@
+from fnmatch import fnmatch
+from typing import List, Optional, Union, TYPE_CHECKING
+import torch
+
+from optimum.quanto.quantize import _quantize_submodule
+from optimum.quanto.tensor import Optimizer, qtype, qtypes
+from torchao.quantization.quant_api import (
+    quantize_ as torchao_quantize_,
+    Float8WeightOnlyConfig,
+    Int8WeightOnlyConfig
+)
+from optimum.quanto import freeze
+from tqdm import tqdm
+from safetensors.torch import load_file
+from huggingface_hub import hf_hub_download
+
+from toolkit.print import print_acc
+from toolkit.util.ostris_quant import (
+    OstrisLinear,
+    OstrisQuantizer,
+    convert_linear_to_ostris,
+    get_ostris_quantizer,
+)
+import os
+
+if TYPE_CHECKING:
+    from toolkit.models.base_model import BaseModel
+
+# the quantize function in quanto had a bug where it was using exclude instead of include
+
+Q_MODULES = [
+    "QLinear",
+    "QConv2d",
+    "QEmbedding",
+    "QBatchNorm2d",
+    "QLayerNorm",
+    "QConvTranspose2d",
+    "QEmbeddingBag",
+    "OstrisLinear",
+]
+
+torchao_qtypes = {
+    # "int4": Int4WeightOnlyConfig(),
+    # uint2..uint8 are handled by the UIntXQuantizer ostris backend
+    # (toolkit/util/uintx_quant.py), a bit-exact reproduction of torchao 0.10.0's
+    # UIntXWeightOnlyConfig, so ARAs stay byte-identical after torchao upgrades
+    "int8": Int8WeightOnlyConfig(),
+    "float8": Float8WeightOnlyConfig(),
+}
+
+
+class aotype:
+    def __init__(self, name: str):
+        self.name = name
+        self.config = torchao_qtypes[name]
+
+
+class ostristype:
+    # custom quantization backend (see toolkit/util/ostris_quant.py), e.g. orbit2/3/4
+    def __init__(self, name: str, quantizer: OstrisQuantizer):
+        self.name = name
+        self.quantizer = quantizer
+
+
+def get_qtype(qtype: Union[str, qtype]) -> qtype:
+    if qtype in torchao_qtypes:
+        return aotype(qtype)
+    if isinstance(qtype, str):
+        ostris_quantizer = get_ostris_quantizer(qtype)
+        if ostris_quantizer is not None:
+            return ostristype(qtype, ostris_quantizer)
+        return qtypes[qtype]
+    else:
+        return qtype
+
+
+def is_quantized_tensor(t) -> bool:
+    # torchao stores quantized weights as tensor subclasses (e.g. AffineQuantizedTensor) under torchao.*
+    # that still report as nn.Parameter and expose .dequantize(). (quanto is handled separately.)
+    # _is_ostris_weight tags two OstrisLinear tensors: the .weight property's eager tensor
+    # (already dequantized; .dequantize() is a no-op) so the merge paths route through
+    # requantize_module_weight, and the lazy OstrisLazyWeight emitted by state_dict()
+    # (holds no data; .dequantize() materializes) so save loops dequantize it per key.
+    if getattr(t, '_is_ostris_weight', False):
+        return True
+    return 'torchao' in type(t).__module__ and hasattr(t, 'dequantize')
+
+
+def dequantize_if_quantized(t):
+    return t.dequantize() if is_quantized_tensor(t) else t
+
+
+def get_torchao_config(qtype):
+    # returns the requantization config for a given qtype string (a torchao config, or the
+    # ostristype for custom backends), or None if the qtype supports neither
+    if qtype is None:
+        return None
+    try:
+        q = get_qtype(qtype)
+    except Exception:
+        return None
+    if isinstance(q, aotype):
+        return q.config
+    if isinstance(q, ostristype):
+        return q
+    return None
+
+
+def requantize_module_weight(module, fp_weight, orig_dtype, config) -> None:
+    """Write a full precision weight back into module.weight, re-quantizing in place if a
+    requantization config is provided so the module stays quantized (used by the continuous
+    merge/reset method). If config is None the weight is left in full precision."""
+    if isinstance(module, OstrisLinear):
+        # the module's backend reuses its existing quantization state; config is not needed
+        module.requantize_(fp_weight)
+        return
+    if isinstance(config, ostristype):
+        # custom backend config but the module was never converted (e.g. skipped at
+        # quantize time); leave it in full precision
+        config = None
+    module.weight = torch.nn.Parameter(fp_weight.to(orig_dtype), requires_grad=False)
+    if config is not None:
+        torchao_quantize_(module, config)
+
+
+def quantize(
+    model: torch.nn.Module,
+    weights: Optional[Union[str, qtype, aotype]] = None,
+    activations: Optional[Union[str, qtype]] = None,
+    optimizer: Optional[Optimizer] = None,
+    include: Optional[Union[str, List[str]]] = None,
+    exclude: Optional[Union[str, List[str]]] = None,
+    quantize_device: Optional[torch.device] = None,
+):
+    """Quantize the specified model submodules
+
+    Recursively quantize the submodules of the specified parent model.
+
+    Only modules that have quantized counterparts will be quantized.
+
+    If include patterns are specified, the submodule name must match one of them.
+
+    If exclude patterns are specified, the submodule must not match one of them.
+
+    Include or exclude patterns are Unix shell-style wildcards which are NOT regular expressions. See
+    https://docs.python.org/3/library/fnmatch.html for more details.
+
+    Note: quantization happens in-place and modifies the original model and its descendants.
+
+    Args:
+        model (`torch.nn.Module`): the model whose submodules will be quantized.
+        weights (`Optional[Union[str, qtype]]`): the qtype for weights quantization.
+        activations (`Optional[Union[str, qtype]]`): the qtype for activations quantization.
+        include (`Optional[Union[str, List[str]]]`):
+            Patterns constituting the allowlist. If provided, module names must match at
+            least one pattern from the allowlist.
+        exclude (`Optional[Union[str, List[str]]]`):
+            Patterns constituting the denylist. If provided, module names must not match
+            any patterns from the denylist.
+        quantize_device (`Optional[torch.device]`):
+            If provided, each module is moved to this device to quantize, then moved
+            back to the device its weights were on initially. Lets a CPU-resident
+            model (low vram) quantize layer-by-layer on the GPU.
+    """
+    if include is not None:
+        include = [include] if isinstance(include, str) else include
+    if exclude is not None:
+        exclude = [exclude] if isinstance(exclude, str) else exclude
+    for name, m in model.named_modules():
+        if include is not None and not any(
+            fnmatch(name, pattern) for pattern in include
+        ):
+            continue
+        if exclude is not None and any(fnmatch(name, pattern) for pattern in exclude):
+            continue
+        try:
+            # check if m is QLinear or QConv2d
+            if m.__class__.__name__ in Q_MODULES:
+                # OstrisLinear may still be RE-quantized into a different
+                # ostris qtype (same qtype is a per-layer no-op); every other
+                # already-quantized module type is always left alone, which
+                # also keeps quanto/torchao from double-quantizing
+                # pre-quantized checkpoints
+                if not (
+                    isinstance(weights, ostristype)
+                    and m.__class__.__name__ == "OstrisLinear"
+                ):
+                    continue
+            if (
+                isinstance(weights, aotype)
+                and not isinstance(m, torch.nn.Linear)
+                and (
+                    quantize_device is not None
+                    or include is not None
+                    or exclude is not None
+                )
+            ):
+                # torchao only quantizes nn.Linear; when a device round-trip or
+                # include/exclude filtering is in play, skip containers so each
+                # linear is handled individually (a container-level torchao call
+                # would quantize excluded children too)
+                continue
+            orig_device = None
+            if quantize_device is not None and next(m.children(), None) is None:
+                # OstrisLinear layers being re-quantized hold buffers, not params
+                param = next(m.parameters(recurse=False), None)
+                if param is None:
+                    param = next(m.buffers(recurse=False), None)
+                if param is not None:
+                    orig_device = param.device
+                    m.to(quantize_device)
+            try:
+                if isinstance(weights, ostristype):
+                    if isinstance(m, torch.nn.Linear):
+                        convert_linear_to_ostris(m, weights.quantizer)
+                elif isinstance(weights, aotype):
+                    torchao_quantize_(m, weights.config)
+                else:
+                    _quantize_submodule(
+                        model,
+                        name,
+                        m,
+                        weights=weights,
+                        activations=activations,
+                        optimizer=optimizer,
+                    )
+            finally:
+                if orig_device is not None:
+                    # quanto replaces the module in its parent, so re-fetch by name
+                    model.get_submodule(name).to(orig_device)
+        except Exception as e:
+            print(f"Failed to quantize {name}: {e}")
+            # raise e
+
+
+def _has_quantizable_linear(module: torch.nn.Module, weights, exclude=None) -> bool:
+    """Whether quantizing ``module`` with ``weights`` would change anything.
+
+    False when every non-excluded linear is already quantized with the same
+    ostris qtype (or cannot be quantized at all) — the pre-quantized-checkpoint
+    case, where the whole block can be skipped without the device round-trip.
+    ``exclude`` patterns are matched against module names relative to
+    ``module`` (use leading wildcards for patterns aimed at inner layers)."""
+    if not isinstance(weights, ostristype):
+        return True
+    for name, m in module.named_modules():
+        if not isinstance(m, torch.nn.Linear):
+            continue
+        if exclude is not None and any(fnmatch(name, pattern) for pattern in exclude):
+            continue
+        if isinstance(m, OstrisLinear):
+            if getattr(
+                m.ostris_quantizer, "qtype", None
+            ) != weights.quantizer.qtype and weights.quantizer.can_quantize(m):
+                return True
+            continue
+        if m.__class__.__name__ in Q_MODULES:
+            continue
+        if weights.quantizer.can_quantize(m):
+            return True
+    return False
+
+
+def quantize_model(
+    base_model: "BaseModel",
+    model_to_quantize: torch.nn.Module,
+):
+    from toolkit.dequantize import patch_dequantization_on_save
+
+    if not hasattr(base_model, "get_transformer_block_names"):
+        raise ValueError(
+            "The model to quantize must have a method `get_transformer_block_names`."
+        )
+
+    # patch the state dict method
+    patch_dequantization_on_save(model_to_quantize)
+
+    # sensitive modules to keep in full precision (fnmatch patterns)
+    exclude_modules = base_model.get_quantization_exclude_modules() or []
+
+    if base_model.model_config.accuracy_recovery_adapter is not None:
+        from toolkit.config_modules import NetworkConfig
+        from toolkit.lora_special import LoRASpecialNetwork
+
+        # we need to load and quantize with an accuracy recovery adapter
+        # todo handle hf repos
+        load_lora_path = base_model.model_config.accuracy_recovery_adapter
+
+        if not os.path.exists(load_lora_path):
+            # not local file, grab from the hub
+
+            path_split = load_lora_path.split("/")
+            if len(path_split) > 3:
+                raise ValueError(
+                    "The accuracy recovery adapter path must be a local path or for a hf repo, 'username/repo_name/filename.safetensors'."
+                )
+            repo_id = f"{path_split[0]}/{path_split[1]}"
+            print_acc(f"Grabbing lora from the hub: {load_lora_path}")
+            new_lora_path = hf_hub_download(
+                repo_id,
+                filename=path_split[-1],
+            )
+            # replace the path
+            load_lora_path = new_lora_path
+
+        # build the lora config based on the lora weights
+        lora_state_dict = load_file(load_lora_path)
+        
+        if hasattr(base_model, "convert_lora_weights_before_load"):
+            lora_state_dict = base_model.convert_lora_weights_before_load(lora_state_dict)
+        
+        network_config = {
+            "type": "lora",
+            "network_kwargs": {"only_if_contains": []},
+            "transformer_only": False,
+        }
+        first_key = list(lora_state_dict.keys())[0]
+        first_weight = lora_state_dict[first_key]
+        # if it starts with lycoris and includes lokr
+        if first_key.startswith("lycoris") and any(
+            "lokr" in key for key in lora_state_dict.keys()
+        ):
+            network_config["type"] = "lokr"
+        
+        network_kwargs = {}
+
+        # find firse loraA weight
+        if network_config["type"] == "lora":
+            linear_dim = None
+            for key, value in lora_state_dict.items():
+                if "lora_A" in key:
+                    linear_dim = int(value.shape[0])
+                    break
+            linear_alpha = linear_dim
+            network_config["linear"] = linear_dim
+            network_config["linear_alpha"] = linear_alpha
+
+            # we build the keys to match every key
+            only_if_contains = []
+            for key in lora_state_dict.keys():
+                contains_key = key.split(".lora_")[0]
+                if contains_key not in only_if_contains:
+                    only_if_contains.append(contains_key)
+
+            network_kwargs["only_if_contains"] = only_if_contains
+        elif network_config["type"] == "lokr":
+            # find the factor
+            largest_factor = 0
+            for key, value in lora_state_dict.items():
+                if "lokr_w1" in key:
+                    factor = int(value.shape[0])
+                    if factor > largest_factor:
+                        largest_factor = factor
+            network_config["lokr_full_rank"] = True
+            network_config["lokr_factor"] = largest_factor
+
+            only_if_contains = []
+            for key in lora_state_dict.keys():
+                if "lokr_w1" in key:
+                    contains_key = key.split(".lokr_w1")[0]
+                    contains_key = contains_key.replace("lycoris_", "")
+                    if contains_key not in only_if_contains:
+                        only_if_contains.append(contains_key)
+            network_kwargs["only_if_contains"] = only_if_contains
+        
+        if hasattr(base_model, 'target_lora_modules'):
+            network_kwargs['target_lin_modules'] = base_model.target_lora_modules
+
+        # todo auto grab these
+        # get dim and scale
+        network_config = NetworkConfig(**network_config)
+
+        network = LoRASpecialNetwork(
+            text_encoder=None,
+            unet=model_to_quantize,
+            lora_dim=network_config.linear,
+            multiplier=1.0,
+            alpha=network_config.linear_alpha,
+            # conv_lora_dim=self.network_config.conv,
+            # conv_alpha=self.network_config.conv_alpha,
+            train_unet=True,
+            train_text_encoder=False,
+            network_config=network_config,
+            network_type=network_config.type,
+            transformer_only=network_config.transformer_only,
+            is_transformer=base_model.is_transformer,
+            base_model=base_model,
+            is_ara=True,
+            **network_kwargs
+        )
+        network.apply_to(
+            None, model_to_quantize, apply_text_encoder=False, apply_unet=True
+        )
+        network.force_to(base_model.device_torch, dtype=base_model.torch_dtype)
+        network._update_torch_multiplier()
+        network.load_weights(lora_state_dict)
+        network.eval()
+        network.is_active = True
+        network.can_merge_in = False
+        base_model.accuracy_recovery_adapter = network
+
+        # quantize it
+        lora_exclude_modules = []
+        quantization_type = get_qtype(base_model.model_config.qtype)
+        for lora_module in tqdm(network.unet_loras, desc="Attaching quantization"):
+            # the lora has already hijacked the original module
+            orig_module = lora_module.org_module[0]
+            orig_module.to(base_model.torch_dtype)
+            # make the params not require gradients
+            for param in orig_module.parameters():
+                param.requires_grad = False
+            quantize(orig_module, weights=quantization_type)
+            freeze(orig_module)
+            module_name = lora_module.lora_name.replace('$$', '.').replace('transformer.', '')
+            lora_exclude_modules.append(module_name)
+            if base_model.model_config.low_vram:
+                # move it back to cpu
+                orig_module.to("cpu")
+        pass
+        # quantize additional layers
+        print_acc(" - quantizing additional layers")
+        quantization_type = get_qtype('uint8')
+        quantize(
+            model_to_quantize,
+            weights=quantization_type,
+            exclude=lora_exclude_modules + exclude_modules
+        )
+    else:
+        # quantize model the original way without an accuracy recovery adapter
+        # move and quantize only certain pieces at a time.
+        quantization_type = get_qtype(base_model.model_config.qtype)
+        # all_blocks = list(model_to_quantize.transformer_blocks)
+        all_blocks: List[torch.nn.Module] = []
+        transformer_block_names = base_model.get_transformer_block_names()
+        for name in transformer_block_names:
+            # name may be a dotted path for models that nest their blocks
+            # (e.g. hidream_o1's "model.language_model.layers").
+            block_list = model_to_quantize
+            for part in name.split('.'):
+                block_list = getattr(block_list, part, None)
+                if block_list is None:
+                    break
+            if block_list is not None:
+                all_blocks += list(block_list)
+        base_model.print_and_status_update(
+            f" - quantizing {len(all_blocks)} transformer blocks"
+        )
+        already_quantized = 0
+        for block in tqdm(all_blocks):
+            if not _has_quantizable_linear(block, quantization_type, exclude_modules):
+                # pre-quantized checkpoint with a matching qtype: nothing in
+                # this block would change — skip the device round-trip and the
+                # dtype cast entirely so the load stays byte-identical
+                already_quantized += 1
+                continue
+            block.to(base_model.device_torch, dtype=base_model.torch_dtype, non_blocking=True)
+            # exclude patterns with a leading wildcard (e.g. "*adaln_proj*")
+            # also apply inside blocks, where names are block-relative
+            quantize(block, weights=quantization_type, exclude=exclude_modules)
+            freeze(block)
+            # NOT non_blocking: an async D2H allocates the cpu destination in pinned
+            # memory, which the caching host allocator keeps forever (with power-of-2
+            # bucket rounding on top) — that silently retained a model-sized chunk of
+            # host ram after the weights moved back to the gpu for training
+            block.to("cpu")
+        if already_quantized:
+            base_model.print_and_status_update(
+                f" - {already_quantized} blocks already quantized with a matching qtype; left untouched"
+            )
+
+        # todo, on extras find a universal way to quantize them on device and move them back to their original
+        # device without having to move the transformer blocks to the device first
+        base_model.print_and_status_update(" - quantizing extras")
+        # model_to_quantize.to(base_model.device_torch, dtype=base_model.torch_dtype)
+        quantize(model_to_quantize, weights=quantization_type, exclude=exclude_modules)
+        freeze(model_to_quantize)

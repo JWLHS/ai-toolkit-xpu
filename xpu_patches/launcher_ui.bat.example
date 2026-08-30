@@ -1,0 +1,9 @@
+@echo off
+chcp 65001
+set "PATH=E:\tt\ffmpeg-shared\ffmpeg-n8.1-latest-win64-gpl-shared-8.1\bin;%PATH%"
+set "PATH=E:\tt\python;E:\tt\python\Scripts;%PATH%"
+cd /d E:\tt\ui
+start http://localhost:8675
+start "TensorBoard" E:\tt\python\python.exe -m tensorboard.main --logdir=E:\tt\logs --port 6006
+npm start
+pause
