@@ -158,7 +158,7 @@ cd ui && npm start                          # 中文 UI + 曲线图
 
 ## 8. FAQ
 
-- **torchao 用 0.17 还是 0.18？** 默认 **0.17.0+xpu**（krea2 int8 实测每步 19-22s、显存 8.7GB，最快最稳）。注意：0.17 的 **float8** 同样缺 `Float8Tensor.abs`（二次量化会静默失败），0.18 则 int8/float8 都缺（int8 换成新 `Int8Tensor` 且丢了幂等保护）。[fix_torchao_018_xpu.py](E:/tt/fix_torchao_018_xpu.py) 已改为“缺啥补啥、不看版本”，`run.py` 自动加载，0.17 的 float8 也被兜住（实测通过）。已向官方提 issue 并补充修正说明：[pytorch/ao#4845](https://github.com/pytorch/ao/issues/4845#issuecomment-5454705829)。
+- **torchao 用 0.17 还是 0.18？** 默认 **0.17.0+xpu**（krea2 int8 实测每步 19-22s、显存 8.7GB，最快最稳）。注意：0.17 的 **float8** 同样缺 `Float8Tensor.abs`（二次量化会静默失败），0.18 则 int8/float8 都缺（int8 换成新 `Int8Tensor` 且丢了幂等保护）。[fix_torchao_018_xpu.py](fix_torchao_018_xpu.py) 已改为“缺啥补啥、不看版本”，`run.py` 自动加载，0.17 的 float8 也被兜住（实测通过）。已向官方提 issue 并补充修正说明：[pytorch/ao#4845](https://github.com/pytorch/ao/issues/4845#issuecomment-5454705829)。
 - **transformers 用 4.57.3 还是 5.5.3？** 5.5.3（官方 0.12.27 按 5.x 编写）。
 - **`fix_torchao_xpu.py` 还有用吗？** 已过时，0.12.27 自带 ostris 量化后端。
 - **HF 报 “client has been closed”？** huggingface_hub 的 httpx 线程问题，文件缓存后设 `HF_HUB_OFFLINE=1` 重跑即可。

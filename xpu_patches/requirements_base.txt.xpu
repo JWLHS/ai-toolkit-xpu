@@ -10,11 +10,12 @@ torch==2.13.0+xpu
 torchvision==0.28.0+xpu
 torchaudio==2.11.0+xpu
 triton-xpu==3.7.2
-# 官方钉 torchao==0.10.0 (PyPI); XPU 后端版用 0.17.0+xpu
+# 官方钉 torchao==0.10.0 (PyPI); XPU 后端版用 0.17.0+xpu (默认, 实测最快)。
+# 0.18.0+xpu 也可用但需 fix_torchao_018_xpu.py 补丁且速度/显存有回退,
+# 见 XPU_ADAPTATION_GUIDE.md FAQ。
 torchao==0.17.0+xpu
 
 # ---- 以下跟随官方 ----
-safetensors
 safetensors
 git+https://github.com/huggingface/diffusers.git@c943837899b16cbae2f619b8dd4f7bb6f07dd81a
 #pip install git+https://github.com/huggingface/diffusers.git@refs/pull/13432/head
