@@ -199,3 +199,5 @@ original_repo
 /xpu-smi/
 /ui/node_modules/
 node_modules/
+.venv-xpu/
+logs/

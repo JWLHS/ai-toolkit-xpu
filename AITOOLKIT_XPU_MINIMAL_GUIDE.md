@@ -25,6 +25,11 @@ Copy-Item xpu_patches/requirements_base.txt.xpu requirements_base.txt
 python -m pip install -r requirements.txt
 ```
 
+> **更省事**：如果直接克隆本仓库（已合入 XPU 改造），Windows 下运行根目录
+> `setup_xpu.bat` 即可一键补全环境（git/Python/venv/XPU 依赖/FFmpeg/验证）；
+> 日常启动 UI 用 `run_xpu.bat`。第 1、2 节的补丁与依赖流程只在你坚持
+> 从官方仓库自己改造时才需要。
+
 这 5 个补丁是**最小集合**——不打 UI 汉化、不修曲线图、不装 FFmpeg，训练照样能跑：
 
 | 补丁 | 作用 | 为什么必须 |

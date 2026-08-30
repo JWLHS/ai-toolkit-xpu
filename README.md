@@ -3,13 +3,26 @@
 > 基于 [ostris/ai-toolkit](https://github.com/ostris/ai-toolkit) 官方 0.12.27（Apache-2.0）的
 > XPU 改造分支：让 ai-toolkit 在 **Intel Arc / oneAPI (XPU)** 上直接训练，
 > 已验证环境：Windows + Python 3.12 + Intel Arc A770 16GB。
->
-> - 完整改造说明：[XPU_ADAPTATION_GUIDE.md](XPU_ADAPTATION_GUIDE.md)
-> - 通用素材准备与最小训练配置：[AITOOLKIT_XPU_MINIMAL_GUIDE.md](AITOOLKIT_XPU_MINIMAL_GUIDE.md)
-> - 从官方仓库重新打补丁的 5 个补丁：[xpu_patches/](xpu_patches/)
-> - 本仓库 `requirements_base.txt` 已是 XPU 版，直接 `python -m pip install -r requirements.txt`
->
-> 克隆后运行：`python run.py`（CLI）或 `cd ui && npm install && npm run build && npm start`（Web UI）。
+
+## 快速开始（Windows / Intel Arc）
+
+```bat
+git clone <本仓库地址> ai-toolkit-xpu
+cd ai-toolkit-xpu
+setup_xpu.bat     :: 一键：装 git/Python → 建 venv → 装 XPU 依赖 → 下载 FFmpeg → 验证 torch.xpu
+run_xpu.bat       :: 以后日常启动 Web UI（http://localhost:8675）
+```
+
+CLI 训练：
+
+```bat
+.venv-xpu\Scripts\python.exe run.py config\你的配置.yaml
+```
+
+> 完整改造说明见 [XPU_ADAPTATION_GUIDE.md](XPU_ADAPTATION_GUIDE.md)，
+> 通用素材准备与最小训练配置见 [AITOOLKIT_XPU_MINIMAL_GUIDE.md](AITOOLKIT_XPU_MINIMAL_GUIDE.md)，
+> 从官方仓库重新打补丁的 5 个补丁在 [xpu_patches/](xpu_patches/)。
+> 本仓库 `requirements_base.txt` 已是 XPU 版，`setup_xpu.bat` 会直接安装。
 
 ---
 

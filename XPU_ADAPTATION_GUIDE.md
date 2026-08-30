@@ -45,6 +45,10 @@ python -m pip install -r requirements.txt
 python -m pip install torchcodec==0.15.0
 ```
 
+> **更省事**：克隆本仓库后直接运行根目录 `setup_xpu.bat`——
+> 自动装 git/Python、建 `.venv-xpu` 虚拟环境、装 XPU 依赖、下载 FFmpeg、验证 `torch.xpu`；
+> 日常启动 UI 用 `run_xpu.bat`。（本仓库 `requirements_base.txt` 已内置 XPU 依赖与 torchcodec 0.15.0）
+
 ### 依赖覆盖表
 
 | 包 | 官方 | 本改造 | 原因 |
