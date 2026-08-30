@@ -19,7 +19,7 @@
 ## 快速开始（Windows / Intel Arc）
 
 ```bat
-git clone <本仓库地址> ai-toolkit-xpu
+git clone https://github.com/JWLHS/ai-toolkit-xpu
 cd ai-toolkit-xpu
 setup_xpu.bat     :: 一键：装 git/Python → 建 venv → 装 XPU 依赖 → 下载 FFmpeg → 验证 torch.xpu
 run_xpu.bat       :: 以后日常启动 Web UI（http://localhost:8675）
