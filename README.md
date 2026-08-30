@@ -1,8 +1,20 @@
 # ai-toolkit XPU（Intel Arc）适配版
 
-> 基于 [ostris/ai-toolkit](https://github.com/ostris/ai-toolkit) 官方 0.12.27（Apache-2.0）的
-> XPU 改造分支：让 ai-toolkit 在 **Intel Arc / oneAPI (XPU)** 上直接训练，
+> 让 ai-toolkit 在 **Intel Arc / oneAPI (XPU)** 上直接训练。
 > 已验证环境：Windows + Python 3.12 + Intel Arc A770 16GB。
+
+## 关于本仓库
+
+本仓库**修改自原版** [ostris/ai-toolkit](https://github.com/ostris/ai-toolkit)
+（官方 0.12.27，[Apache-2.0](LICENSE) 许可），并非独立项目。与原版的主要差异：
+
+- 新增 5 个 XPU 补丁（Intel Arc / oneAPI 支持，见 [xpu_patches/](xpu_patches/)）
+- 依赖锁定为 XPU 版本（torch 2.13.0+xpu / torchao 0.17.0+xpu，见 `requirements_base.txt`）
+- 新增一键环境脚本 `setup_xpu.bat` / `run_xpu.bat`，克隆后直接补全依赖
+- 内置中文 UI 与训练曲线图修复（可选）
+- 新增两份中文指南（改造说明 / 素材准备）
+
+原版 README 保留在下方（"Ostris AI Toolkit" 起），版权归原项目所有。
 
 ## 快速开始（Windows / Intel Arc）
 
