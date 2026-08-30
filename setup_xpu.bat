@@ -4,13 +4,17 @@ setlocal
 cd /d "%~dp0"
 
 REM ============================================================
-REM  国内镜像开关：1 = 清华 PyPI 镜像 + HF 镜像（墙内友好）
+REM  国内镜像开关：1 = 走国内镜像（优先），保留官方源兜底
 REM  0 = 直连官方源（默认）
-REM  说明：普通依赖（含 torchcodec）走清华 PyPI；
+REM  说明：已实测清华 PyPI 本网络 403，默认改用阿里云 PyPI，
+REM        官方 PyPI 作为兜底（有镜像走镜像，缺货回原位）。
+REM        想换镜像改 PIP_CN_MIRROR，例如腾讯云：
+REM        https://mirrors.cloud.tencent.com/pypi/simple
 REM        模型权重下载走 HF 镜像；torch/torchao/triton 等 XPU 轮子
 REM        目前没有国内镜像，仍走官方 PyTorch 索引（实测国内可达）。
 REM ============================================================
 set "USE_CN_MIRROR=0"
+set "PIP_CN_MIRROR=https://mirrors.aliyun.com/pypi/simple"
 
 echo ============================================================
 echo   ai-toolkit XPU 一键环境初始化
@@ -62,17 +66,17 @@ if not exist ".venv-xpu\Scripts\python.exe" (
 set "VENV_PY=%CD%\.venv-xpu\Scripts\python.exe"
 
 REM ---------- 3) 安装依赖（XPU 轮子走 requirements_base.txt 里的 extra-index-url）----------
-echo [2/4] 安装依赖（torch 2.13.0+xpu / torchao 0.17.0+xpu，首次需要较长时间）...
-"%VENV_PY%" -m pip install --upgrade pip
-if errorlevel 1 goto :fail
 if "%USE_CN_MIRROR%"=="1" (
-    echo [!] 已启用国内镜像（清华 PyPI + HF 镜像）
-    set "PIP_EXTRA=-i https://pypi.tuna.tsinghua.edu.cn/simple"
+    echo [!] 已启用国内镜像: %PIP_CN_MIRROR% （官方 PyPI 兜底 + HF 镜像）
+    set "PIP_EXTRA=-i %PIP_CN_MIRROR% --extra-index-url https://pypi.org/simple"
     set "HF_ENDPOINT=https://hf-mirror.com"
 ) else (
     set "PIP_EXTRA="
     set "HF_ENDPOINT="
 )
+echo [2/4] 安装依赖（torch 2.13.0+xpu / torchao 0.17.0+xpu，首次需要较长时间）...
+"%VENV_PY%" -m pip install %PIP_EXTRA% --upgrade pip
+if errorlevel 1 goto :fail
 "%VENV_PY%" -m pip install %PIP_EXTRA% -r requirements.txt
 if errorlevel 1 goto :fail
 
