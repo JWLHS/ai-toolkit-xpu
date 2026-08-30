@@ -3,6 +3,10 @@ chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
+REM 与 setup_xpu.bat 保持一致的镜像开关（影响训练时模型权重下载）
+set "USE_CN_MIRROR=0"
+if "%USE_CN_MIRROR%"=="1" set "HF_ENDPOINT=https://hf-mirror.com"
+
 if not exist ".venv-xpu\Scripts\python.exe" (
     echo [!] 还没有初始化环境，先运行 setup_xpu.bat
     pause

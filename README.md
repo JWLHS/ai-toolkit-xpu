@@ -25,6 +25,9 @@ setup_xpu.bat     :: 一键：装 git/Python → 建 venv → 装 XPU 依赖 →
 run_xpu.bat       :: 以后日常启动 Web UI（http://localhost:8675）
 ```
 
+> 网络环境受限（墙内）时：把 `setup_xpu.bat` 和 `run_xpu.bat` 里的
+> `USE_CN_MIRROR` 改成 `1`，pip 走清华镜像、模型权重下载走 HF 镜像。
+
 CLI 训练：
 
 ```bat

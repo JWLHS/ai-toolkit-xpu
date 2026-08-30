@@ -3,6 +3,12 @@ chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
+REM ============================================================
+REM  国内镜像开关：1 = 清华 PyPI 镜像 + HF 镜像（墙内友好）
+REM  0 = 直连官方源（默认）
+REM ============================================================
+set "USE_CN_MIRROR=0"
+
 echo ============================================================
 echo   ai-toolkit XPU 一键环境初始化
 echo   平台: Windows + Intel Arc (oneAPI)
@@ -56,7 +62,15 @@ REM ---------- 3) 安装依赖（XPU 轮子走 requirements_base.txt 里的 extr
 echo [2/4] 安装依赖（torch 2.13.0+xpu / torchao 0.17.0+xpu，首次需要较长时间）...
 "%VENV_PY%" -m pip install --upgrade pip
 if errorlevel 1 goto :fail
-"%VENV_PY%" -m pip install -r requirements.txt
+if "%USE_CN_MIRROR%"=="1" (
+    echo [!] 已启用国内镜像（清华 PyPI + HF 镜像）
+    set "PIP_EXTRA=-i https://pypi.tuna.tsinghua.edu.cn/simple"
+    set "HF_ENDPOINT=https://hf-mirror.com"
+) else (
+    set "PIP_EXTRA="
+    set "HF_ENDPOINT="
+)
+"%VENV_PY%" -m pip install %PIP_EXTRA% -r requirements.txt
 if errorlevel 1 goto :fail
 
 REM ---------- 4) FFmpeg 8.1 full-shared ----------
@@ -77,6 +91,7 @@ echo ============================================================
 echo   初始化完成！常用命令：
 echo   训练:  .venv-xpu\Scripts\python.exe run.py config\你的配置.yaml
 echo   WebUI: 运行 run_xpu.bat
+if "%USE_CN_MIRROR%"=="1" echo   模型下载已走 HF 镜像: %HF_ENDPOINT%
 echo ============================================================
 pause
 exit /b 0
