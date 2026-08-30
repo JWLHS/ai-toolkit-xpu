@@ -26,7 +26,8 @@ run_xpu.bat       :: 以后日常启动 Web UI（http://localhost:8675）
 ```
 
 > 网络环境受限（墙内）时：把 `setup_xpu.bat` 和 `run_xpu.bat` 里的
-> `USE_CN_MIRROR` 改成 `1`，pip 走清华镜像、模型权重下载走 HF 镜像。
+> `USE_CN_MIRROR` 改成 `1`，普通依赖走清华 PyPI、模型权重下载走 HF 镜像；
+> torch/torchao 等 XPU 轮子暂无国内镜像，仍走官方 PyTorch 索引（实测国内可达）。
 
 CLI 训练：
 
