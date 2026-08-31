@@ -208,7 +208,8 @@ meta:
 
 **为什么 torchao 钉 0.17 不升 0.18？**
 0.18 把量化权重改成新张量子类（Int8Tensor/Float8Tensor），XPU 后端缺算子注册
-（int8 缺 `aten.view`、float8 缺 `aten.abs`），量化会静默失效、白占显存还变慢。
+（int8 缺 `aten.view`、float8 缺 `aten.abs`），量化会静默失效
+（权重实际未量化，显存占用与未量化一致）。
 0.17 是旧量化路径，无此问题。详见 XPU 说明书 FAQ。
 
 **为什么配置里写 adamw8bit 也能跑？**
