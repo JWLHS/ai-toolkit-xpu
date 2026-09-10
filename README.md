@@ -13,6 +13,7 @@
 - 新增一键环境脚本 `setup_xpu.bat` / `run_xpu.bat`，克隆后直接补全依赖
 - 内置中文 UI 与训练曲线图修复（可选）
 - 新增两份中文指南（改造说明 / 素材准备）
+- 移除了 `docker/` 目录：本 fork 的依赖文件面向 XPU，容器（NVIDIA/CUDA）部署请使用上游仓库
 
 原版 README 保留在下方（"Ostris AI Toolkit" 起），版权归原项目所有。
 
