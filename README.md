@@ -92,6 +92,18 @@ run_xpu.bat
 | 显存溢出到共享显存 | 调高「层级卸载」比例、降低分辨率/桶尺寸；原理与调优见 [XPU_ADAPTATION_GUIDE.md](XPU_ADAPTATION_GUIDE.md) |
 | 想换 Python 版本 | `uv python pin 3.12` 然后 `uv sync`，不用删环境 |
 
+## 版本
+
+| 部分 | 版本 |
+| --- | --- |
+| 后端代码基线 | 上游 `0.12.27` → 本 fork 记为 **`0.12.27+xpu`**（见 `version.py` / `pyproject.toml`） |
+| UI | 同步到上游 **0.13.6**（中文词条在 `ui_i18n/`） |
+| 关键依赖 | torch `2.13.0+xpu`、torchao `0.17.0+xpu`、triton-xpu `3.7.2` |
+| Python | `>=3.11,<3.14`，`.python-version` 默认钉 `3.13` |
+
+版本号沿用上游基线的原因是这个 fork 是"跟着上游走"的改造版：改动越少越容易跟上
+官方更新，`+xpu` 只用于区分"这是改造版"。
+
 ## 关于本仓库
 
 本仓库**修改自原版** [ostris/ai-toolkit](https://github.com/ostris/ai-toolkit)

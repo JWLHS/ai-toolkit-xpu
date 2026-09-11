@@ -49,7 +49,7 @@ wheels = [
 
 [[package]]
 name = "ai-toolkit-xpu"
-version = "0.12.27"
+version = "0.12.27+xpu"
 source = { virtual = "." }
 dependencies = [
     { name = "accelerate" },

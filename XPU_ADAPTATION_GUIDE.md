@@ -213,7 +213,7 @@ cd ui && npm start                          # 中文 UI + 曲线图
   而升到 2.14 意味着 torchao 只能用 0.18（int8 重复量化有已知问题，见 [pytorch/ao#4845](https://github.com/pytorch/ao/issues/4845)），
   还要连带重验 torchvision 0.29、oneAPI/驱动与全部补丁。故本仓库钉 2.13.0+xpu。
   注：代码用的是 SDPA 优先级列表，将来任一版本 XPU 支持 flash attention 会自动启用，无需改代码。
-- **`fix_torchao_xpu.py` 还有用吗？** 已过时，0.12.27 自带 ostris 量化后端。
+- **`fix_torchao_xpu.py` 还有用吗？** 已过时（0.12.27 自带 ostris 量化后端），已从仓库移除；保留的本 fork 补丁只有 `fix_torchao_018_xpu.py`。
 - **HF 报 “client has been closed”？** huggingface_hub 的 httpx 线程问题，文件缓存后设 `HF_HUB_OFFLINE=1` 重跑即可。
 
 ## 9. 分享清单

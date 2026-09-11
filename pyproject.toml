@@ -1,6 +1,6 @@
 [project]
 name = "ai-toolkit-xpu"
-version = "0.12.27"
+version = "0.12.27+xpu"
 description = "ai-toolkit (ostris) with Intel Arc / oneAPI (XPU) support"
 requires-python = ">=3.11,<3.14"   # 3.11/3.12/3.13 均可；用 uv python pin 切换
 dependencies = [
