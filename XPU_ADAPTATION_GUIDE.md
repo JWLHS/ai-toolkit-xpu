@@ -1,7 +1,8 @@
 # ai-toolkit XPU 改造说明书（0.12.27）
 
 > 把 [ostris/ai-toolkit](https://github.com/ostris/ai-toolkit) 跑在 Intel Arc GPU（XPU）上，保留中文界面与训练曲线图。
-> 本说明基于 **2026-08-28** 实测：Windows + Python 3.12 + Intel Arc A770 16GB + oneAPI 2026，代码版本官方最新 **0.12.27**。
+> 本说明基于实测：Windows + Python **3.12 / 3.13** + Intel Arc A770 16GB + oneAPI 2026，
+> 代码基线官方 **0.12.27**（UI 已跟进到官方 0.13.6）。
 
 ## 0. 结论先行
 
@@ -20,11 +21,41 @@
 | 组件 | 版本 | 说明 |
 |---|---|---|
 | Windows | 10/11 | 示例路径 `E:\tt` |
-| Python | 3.12.x | 建议便携版 |
+| Python | **3.11 / 3.12 / 3.13 均可** | 3.12 为已验证版本（推荐）；便携版或官方安装版都行 |
 | Intel 显卡驱动 + oneAPI 2026 | runtime | `torch.xpu.is_available()` 必须为 True |
 | Arc 显卡 | A770 16GB 等 | 显存不足靠内存分块搬运（第 4 节） |
 
-## 2. 从零开始（推荐）
+## 2. 快速开始
+
+### 2.1 克隆本仓库（推荐：uv 一键补全环境）
+
+本仓库用 **uv** 管理环境：`pyproject.toml` + `uv.lock` + `.python-version` 就是环境定义
+（备份只需这几个 KB 级文件，不必备份整个虚拟环境）。
+
+```powershell
+git clone https://github.com/JWLHS/ai-toolkit-xpu
+cd ai-toolkit-xpu
+setup_xpu.bat        # = uv python install + uv sync + 下载 FFmpeg + 验证 torch.xpu
+run_xpu.bat          # 之后日常启动 Web UI (http://localhost:8675)
+```
+
+**uv 常用命令**
+
+| 目的 | 命令 |
+|---|---|
+| 安装/同步依赖（幂等，已一致时秒过） | `uv sync` |
+| 换 Python 版本 | `uv python pin 3.13` 然后 `uv sync` |
+| 不激活环境直接跑训练 | `uv run python run.py config\你的配置.yaml` |
+| 备份/迁移环境 | 复制 `pyproject.toml` + `uv.lock` + `.python-version` |
+
+索引说明：`pyproject.toml` 里 `[[tool.uv.index]]`（XPU 索引，`explicit = true`）+
+`[tool.uv.sources]` **只把 torch / torchvision / torchaudio / torchao / triton-xpu 指向 XPU 索引**，
+其余包走 PyPI。这样既拿到 XPU 轮子，又不会被 XPU 索引里同名的其他包（如 torchcodec）劫持版本。
+
+> `setup_xpu.bat` 未装 uv 时会尝试自动安装；若失败请按提示安装
+> <https://docs.astral.sh/uv/getting-started/installation/>。
+
+### 2.2 从官方仓库从头改造（自己打补丁）
 
 ```powershell
 git clone https://github.com/ostris/ai-toolkit.git E:\tt
@@ -45,9 +76,8 @@ python -m pip install -r requirements.txt
 python -m pip install torchcodec==0.15.0
 ```
 
-> **更省事**：克隆本仓库后直接运行根目录 `setup_xpu.bat`——
-> 自动装 git/Python、建 `.venv-xpu` 虚拟环境、装 XPU 依赖、下载 FFmpeg、验证 `torch.xpu`；
-> 日常启动 UI 用 `run_xpu.bat`。（本仓库 `requirements_base.txt` 已内置 XPU 依赖与 torchcodec 0.15.0）
+> 从官方仓库改造时，`requirements_base.txt` 需换成 `xpu_patches/requirements_base.txt.xpu`；
+> 本仓库已内置（另有 uv 用的 `pyproject.toml`）。
 
 ### 依赖覆盖表
 
@@ -158,8 +188,31 @@ cd ui && npm start                          # 中文 UI + 曲线图
 
 ## 8. FAQ
 
+- **XPU 支持 fp64 吗？** **能分配、不能算**：`torch.zeros(dtype=float64, device="xpu")` 可以成功，但任何
+  算子（`arange` / `cos` / `sin` / `einsum` / `matmul`…）都会报
+  `Required aspect fp64 is not supported on the device`。
+  因此**规则是：凡是把 float64 放到设备上参与计算的地方，一律改成 float32**（CPU 侧保留 float64 无妨，
+  参考实现里那点精度只有 CPU 才算得到）。
+  本仓库已把这条规则**铺开到所有模型**（不再只修 krea2）：
+  `toolkit/device_utils.py` 提供 `rope_dtype(device)` 与 `adjust_dtype_for_device(dtype, device)`
+  （XPU/MPS → float32，其余 → float64），已改的地点包括
+  chroma `rope`、hidream `rope`/`expand_timesteps`、boogu_image `get_freqs_cis`、omnigen2 `get_freqs_cis`、
+  zeta_chroma 时间步、prx_pixel_t2i 的 `maybe_adjust_dtype_for_device`、wan21 rotary、krea2 `rope`；
+  minimax_h3 的位置网格在 CPU 上以 float64 构建（保证网格精度），**搬运到设备时降为 float32**。
+  回归验证脚本：`scripts/verify_xpu_fp64_paths.py`（助手行为 + 前提确认 + 6 条模型路径实测）。
+- **环境用 uv 还是 pip？** 推荐 **uv**：`pyproject.toml` + `uv.lock` + `.python-version` 即环境定义，
+  `uv sync` 幂等安装、`uv python pin 3.13` 换版本、备份只需几个 KB 文件。
+  XPU 轮子通过 `[[tool.uv.index]]`（`explicit = true`）+ `[tool.uv.sources]` 精确指向，
+  避免 uv 默认的 first-index 策略把 `torchcodec` 之类解析到 XPU 索引上的错误版本（实测踩过）。
+  Python 版本不写死：`requires-python = ">=3.11,<3.14"`，3.12/3.13 均已实测可用。
+
 - **torchao 用 0.17 还是 0.18？** 默认 **0.17.0+xpu**（krea2 int8 实测每步 19-22s、显存 8.7GB，最稳）。注意：0.17 的 **float8** 同样缺 `Float8Tensor.abs`（二次量化会静默失败），0.18 则 int8/float8 都缺（int8 换成新 `Int8Tensor` 且丢了幂等保护）。[fix_torchao_018_xpu.py](fix_torchao_018_xpu.py) 已改为“缺啥补啥、不看版本”，`run.py` 自动加载，0.17 的 float8 也被兜住（实测通过）。补充：0.18 在本机 ai-toolkit 训练中实测速度/显存劣于 0.17，但根因未定位（可能与我们 dequantize 式补丁实现或使用方式有关），不作为 0.18 缺陷结论。已向官方提 issue 并补充修正说明：[pytorch/ao#4845](https://github.com/pytorch/ao/issues/4845#issuecomment-5454705829)。
 - **transformers 用 4.57.3 还是 5.5.3？** 5.5.3（官方 0.12.27 按 5.x 编写）。
+- **torch 用 2.13 还是 2.14？** 默认 **2.13.0+xpu**。2.14.0+xpu 轮子已发布，但 XPU（截至 2.14）**仍未编译 flash attention**，
+  实测 SDPA 后端只有 `MATH` 可用（`EFFICIENT` 内部也回退 math），即升级没有 attention 层面的实质收益；
+  而升到 2.14 意味着 torchao 只能用 0.18（int8 重复量化有已知问题，见 [pytorch/ao#4845](https://github.com/pytorch/ao/issues/4845)），
+  还要连带重验 torchvision 0.29、oneAPI/驱动与全部补丁。故本仓库钉 2.13.0+xpu。
+  注：代码用的是 SDPA 优先级列表，将来任一版本 XPU 支持 flash attention 会自动启用，无需改代码。
 - **`fix_torchao_xpu.py` 还有用吗？** 已过时，0.12.27 自带 ostris 量化后端。
 - **HF 报 “client has been closed”？** huggingface_hub 的 httpx 线程问题，文件缓存后设 `HF_HUB_OFFLINE=1` 重跑即可。
 

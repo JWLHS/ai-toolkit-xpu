@@ -50,12 +50,12 @@ def maybe_adjust_dtype_for_device(
     dtype: torch.dtype, device: torch.device
 ) -> torch.dtype:
     r"""
-    MPS does not implement float64; fall back to float32 there. On every other device the requested dtype is returned
-    unchanged. Inlined from newer diffusers so this file works on older installs.
+    XPU and MPS do not implement float64; fall back to float32 there. On every other device the requested dtype is
+    returned unchanged. Inlined from newer diffusers so this file works on older installs.
     """
     if (
         device is not None
-        and getattr(device, "type", None) == "mps"
+        and getattr(device, "type", None) in ("mps", "xpu")
         and dtype == torch.float64
     ):
         return torch.float32

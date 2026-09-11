@@ -26,7 +26,7 @@ export function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/api/')) {
     if (!token || token !== tokenToUse) {
       // Return a JSON response with 401 Unauthorized
-      return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
+      return new NextResponse(JSON.stringify({ error: '未授权' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       });

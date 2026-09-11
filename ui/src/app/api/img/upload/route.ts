@@ -40,12 +40,12 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json({
-      message: 'Files uploaded successfully',
+      message: '文件上传成功',
       files: savedFiles,
     });
   } catch (error) {
     console.error('Upload error:', error);
-    return NextResponse.json({ error: 'Error uploading files' }, { status: 500 });
+    return NextResponse.json({ error: '上传文件出错' }, { status: 500 });
   }
 }
 

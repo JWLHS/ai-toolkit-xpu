@@ -1,2 +1,4 @@
 -r requirements_base.txt
-scipy==1.12.0
+# 官方钉 scipy==1.12.0，但该版本没有 cp313 轮子；.python-version 是 3.13，
+# 所以这里放宽到首个支持 3.13 的系列（与 pyproject.toml 保持一致）。
+scipy>=1.14

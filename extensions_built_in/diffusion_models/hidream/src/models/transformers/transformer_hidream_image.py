@@ -309,7 +309,9 @@ class HiDreamImageTransformer2DModel(
         if not torch.is_tensor(timesteps):
             is_mps = device.type == "mps"
             if isinstance(timesteps, float):
-                dtype = torch.float32 if is_mps else torch.float64
+                # XPU/MPS have no fp64 → fp32 there
+                from toolkit.device_utils import adjust_dtype_for_device
+                dtype = adjust_dtype_for_device(torch.float64, device)
             else:
                 dtype = torch.int32 if is_mps else torch.int64
             timesteps = torch.tensor([timesteps], dtype=dtype, device=device)

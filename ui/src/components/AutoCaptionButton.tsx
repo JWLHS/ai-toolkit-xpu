@@ -27,7 +27,7 @@ export default function AutoCaptionButton({ datasetPath, setIsAutoCaptioning, ca
       >
         <Loader2 className="w-4 h-4 animate-spin" />
         <span className="hidden sm:inline">Auto Captioning...</span>
-        <span className="sm:hidden">Captioning</span>
+        <span className="sm:hidden">打标</span>
       </Link>
     );
   }
@@ -44,7 +44,7 @@ export default function AutoCaptionButton({ datasetPath, setIsAutoCaptioning, ca
         )
       }
     >
-      <span className="hidden sm:inline">Auto Caption</span>
+      <span className="hidden sm:inline">自动打标</span>
       <span className="sm:hidden">Caption</span>
     </Button>
   );

@@ -137,7 +137,7 @@ function TextAreaField({
   );
 }
 
-// Medium picker: a dropdown of the official tokens plus a "Custom…" escape hatch
+// Medium picker: a dropdown of the official tokens plus a "自定义…" escape hatch
 // that reveals a free-text input. Recognizes old/variant spellings via canonMedium.
 function MediumField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const canon = canonMedium(value);
@@ -164,7 +164,7 @@ function MediumField({ value, onChange }: { value: string; onChange: (v: string)
             {m}
           </option>
         ))}
-        <option value="__custom__">Custom…</option>
+        <option value="__custom__">自定义…</option>
       </select>
       {showCustom && (
         <input
@@ -192,7 +192,7 @@ function ColorPalette({ colors, max, onChange }: { colors: string[]; max: number
             value={toHex6(c)}
             onChange={e => setAt(i, toHex6(e.target.value))}
             className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 p-0"
-            title="Pick color"
+            title="选择颜色"
           />
           <input
             type="text"
@@ -205,7 +205,7 @@ function ColorPalette({ colors, max, onChange }: { colors: string[]; max: number
             type="button"
             onClick={() => removeAt(i)}
             className="text-gray-500 hover:text-rose-400"
-            title="Remove color"
+            title="移除颜色"
           >
             <X className="w-3 h-3" />
           </button>
@@ -363,11 +363,11 @@ export default function IdeogramCaptionSidebar({
     <div className="flex flex-col gap-4 text-sm">
       {/* Header — stays pinned while the form scrolls */}
       <div className="sticky -top-3 z-20 -mx-3 -mt-3 px-3 pt-3 pb-2 bg-gray-950/95 backdrop-blur border-b border-gray-800 flex items-center gap-2">
-        <span className="text-xs font-semibold text-gray-200">Ideogram Caption</span>
+        <span className="text-xs font-semibold text-gray-200">Ideogram 标注</span>
         {isDirty && (
           <span
             className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_6px] shadow-blue-500/60"
-            title="Unsaved changes"
+            title="有未保存的更改"
           />
         )}
         <button
@@ -379,24 +379,24 @@ export default function IdeogramCaptionSidebar({
             'border-gray-700 text-gray-500 cursor-default': !isDirty,
           })}
         >
-          {isDirty ? 'Save' : 'Saved'}
+          {isDirty ? '保存' : '已保存'}
         </button>
       </div>
 
       <TextAreaField
-        label="High-level description"
+        label="高层描述"
         value={data.high_level_description ?? ''}
         onChange={v => update(d => (d.high_level_description = v))}
         rows={3}
-        placeholder="One-sentence summary of the image..."
+        placeholder="用一句话描述这张图…"
       />
 
-      <Section title="Style">
-        <TextField label="Aesthetics" value={style.aesthetics ?? ''} onChange={v => setStyle('aesthetics', v)} />
-        <TextField label="Lighting" value={style.lighting ?? ''} onChange={v => setStyle('lighting', v)} />
+      <Section title="风格">
+        <TextField label="美学" value={style.aesthetics ?? ''} onChange={v => setStyle('aesthetics', v)} />
+        <TextField label="光照" value={style.lighting ?? ''} onChange={v => setStyle('lighting', v)} />
         <MediumField value={style.medium ?? ''} onChange={setMedium} />
         <TextField
-          label={photoBranch ? 'Photo (camera / film)' : 'Art style (rendering technique)'}
+          label={photoBranch ? '照片（相机／胶片）' : '艺术风格（渲染技法）'}
           value={renderValue}
           onChange={setRender}
           placeholder={photoBranch ? '35mm film still, shallow depth of field' : 'flat vector, clean edges'}
@@ -411,7 +411,7 @@ export default function IdeogramCaptionSidebar({
         </div>
       </Section>
 
-      <Section title="Background">
+      <Section title="背景">
         <TextAreaField
           label=""
           value={decon.background ?? ''}
@@ -421,7 +421,7 @@ export default function IdeogramCaptionSidebar({
             })
           }
           rows={4}
-          placeholder="The scene shell: walls, floor, sky, ambient light..."
+          placeholder="场景外壳：墙面、地面、天空、环境光…"
         />
       </Section>
 
@@ -437,7 +437,7 @@ export default function IdeogramCaptionSidebar({
           <button
             type="button"
             onClick={onToggleDrawing}
-            title="Draw a new box on the image"
+            title="在图上绘制新框"
             className={classNames('flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs transition-colors', {
               'bg-blue-600 border-blue-500 text-white': isDrawing,
               'border-gray-600 text-gray-300 hover:bg-gray-800': !isDrawing,
@@ -474,7 +474,7 @@ export default function IdeogramCaptionSidebar({
                       'bg-gray-800 text-gray-400 hover:text-gray-200': !selected,
                     },
                   )}
-                  title="Select (highlights its box on the image)"
+                  title="选择（在图上高亮对应框）"
                 >
                   <span
                     className="w-2.5 h-2.5 rounded-sm border border-black/30"
@@ -518,7 +518,7 @@ export default function IdeogramCaptionSidebar({
                   type="button"
                   onClick={() => removeElement(i)}
                   className="ml-auto text-gray-500 hover:text-rose-400 transition-colors"
-                  title="Delete element"
+                  title="删除元素"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -526,7 +526,7 @@ export default function IdeogramCaptionSidebar({
 
               {isText && (
                 <TextAreaField
-                  label="Text (rendered in image)"
+                  label="文字（渲染在图里）"
                   value={el.text ?? ''}
                   onChange={v => setElement(i, e => (e.text = v))}
                   rows={2}
@@ -534,7 +534,7 @@ export default function IdeogramCaptionSidebar({
               )}
 
               <TextAreaField
-                label="Description"
+                label="描述"
                 value={el.desc ?? ''}
                 onChange={v => setElement(i, e => (e.desc = v))}
                 rows={3}

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '@/server/prisma';
 
 export async function GET(request: NextRequest, { params }: { params: { jobID: string } }) {
   const { jobID } = await params;
@@ -16,7 +14,8 @@ export async function GET(request: NextRequest, { params }: { params: { jobID: s
     data: {
       stop: true,
       status: 'stopped',
-      info: 'Job stopped',
+      info: '任务已停止',
+      pid: null,
     },
   });
 

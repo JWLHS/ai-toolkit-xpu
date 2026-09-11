@@ -5,6 +5,7 @@ import useJobLossLog, { LossPoint } from '@/hooks/useJobLossLog';
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
+import { openConfirm } from '@/components/ConfirmModal';
 
 interface Props {
   job: Job;
@@ -138,7 +139,7 @@ function dulledColor(rgba: string): string {
 }
 
 export default function JobLossGraph({ job }: Props) {
-  const { series, lossKeys, status, refreshLoss } = useJobLossLog(job.id, 2000);
+  const { series, lossKeys, status, refreshLoss, deleteRange } = useJobLossLog(job.id, 2000);
 
   // Controls
   const [useLogScale, setUseLogScale] = useState(false);
@@ -222,7 +223,8 @@ export default function JobLossGraph({ job }: Props) {
     setEnabled(prev => {
       const next = { ...prev };
       for (const k of lossKeys) {
-        if (next[k] === undefined) next[k] = persistedEnabledRef.current?.[k] ?? (k === 'loss/loss' || k === 'val/loss');
+        if (next[k] === undefined)
+          next[k] = persistedEnabledRef.current?.[k] ?? (k === 'loss/loss' || k === 'val/loss');
       }
       for (const k of Object.keys(next)) {
         if (!lossKeys.includes(k)) delete next[k];
@@ -529,6 +531,46 @@ export default function JobLossGraph({ job }: Props) {
     u.setScale('x', { min: xs[0], max: xs[xs.length - 1] });
   }, []);
 
+  const [deleting, setDeleting] = useState(false);
+
+  // Delete every logged step inside the current zoom window, then zoom back out.
+  const handleDeleteSelectedRange = useCallback(() => {
+    const u = uplotRef.current;
+    if (!u) return;
+    const xs = u.data[0] as number[];
+    if (!xs || !xs.length) return;
+    const sx = u.scales.x;
+    if (sx.min == null || sx.max == null) return;
+    // Snap the visible window to whole steps that actually fall inside it.
+    const minStep = Math.ceil(sx.min);
+    const maxStep = Math.floor(sx.max);
+    if (minStep > maxStep) return;
+    const count = xs.filter(x => x >= minStep && x <= maxStep).length;
+
+    openConfirm({
+      title: '删除选中区间',
+      message: `Permanently delete steps ${minStep.toLocaleString()}–${maxStep.toLocaleString()} (${count.toLocaleString()} plotted points) from the loss log for all metrics? This cannot be undone.`,
+      type: 'danger',
+      confirmText: '删除',
+      onConfirm: async () => {
+        setDeleting(true);
+        try {
+          await deleteRange(minStep, maxStep);
+          // Zoom out: clear the zoom flag first so the data-update effect
+          // refits the x-scale to the remaining data instead of holding the
+          // old window.
+          isZoomedRef.current = false;
+          setIsZoomed(false);
+          handleResetZoom();
+        } catch (e) {
+          console.error('Error deleting loss range:', e);
+        } finally {
+          setDeleting(false);
+        }
+      },
+    });
+  }, [deleteRange, handleResetZoom]);
+
   const totalPoints = built.data[0]?.length ?? 0;
 
   return (
@@ -538,11 +580,11 @@ export default function JobLossGraph({ job }: Props) {
           <div className="h-2 w-2 rounded-full bg-blue-400" />
           <h2 className="text-gray-100 text-sm font-medium">Loss graph</h2>
           <span className="text-xs text-gray-400">
-            {status === 'loading' && 'Loading...'}
-            {status === 'refreshing' && 'Refreshing...'}
-            {status === 'error' && 'Error'}
+            {status === 'loading' && '加载中…'}
+            {status === 'refreshing' && '刷新中…'}
+            {status === 'error' && '错误'}
             {status === 'success' && hasData && `${totalPoints.toLocaleString()} steps`}
-            {status === 'success' && !hasData && 'No data yet'}
+            {status === 'success' && !hasData && '暂无数据'}
           </span>
         </div>
 
@@ -551,7 +593,7 @@ export default function JobLossGraph({ job }: Props) {
           onClick={refreshLoss}
           className="px-3 py-1 rounded-md text-xs bg-gray-700/60 hover:bg-gray-700 text-gray-200 border border-gray-700"
         >
-          Refresh
+          刷新
         </button>
       </div>
 
@@ -563,18 +605,28 @@ export default function JobLossGraph({ job }: Props) {
         >
           {!hasData ? (
             <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
-              {status === 'error' ? 'Failed to load loss logs.' : 'Waiting for loss points...'}
+              {status === 'error' ? '加载损失日志失败。' : '等待损失数据…'}
             </div>
           ) : (
             <>
               {isZoomed && (
-                <button
-                  type="button"
-                  onClick={handleResetZoom}
-                  className="absolute top-2 right-2 z-10 px-2 py-1 rounded text-xs bg-blue-600/80 hover:bg-blue-600 text-white border border-blue-500/50"
-                >
-                  Reset zoom
-                </button>
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDeleteSelectedRange}
+                    disabled={deleting}
+                    className="px-2 py-1 rounded text-xs bg-red-600/80 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white border border-red-500/50"
+                  >
+                    {deleting ? '删除中…' : '删除选中区间'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetZoom}
+                    className="px-2 py-1 rounded text-xs bg-blue-600/80 hover:bg-blue-600 text-white border border-blue-500/50"
+                  >
+                    Reset zoom
+                  </button>
+                </div>
               )}
               <div ref={chartHostRef} className="absolute top-0 left-0 right-0 bottom-2 overflow-hidden">
                 <div ref={containerRef} />
@@ -588,18 +640,18 @@ export default function JobLossGraph({ job }: Props) {
       <div className="px-4 pb-2 shrink-0">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="bg-gray-950 border border-gray-800 rounded-lg p-3">
-            <label className="block text-xs text-gray-400 mb-2">Display</label>
+            <label className="block text-xs text-gray-400 mb-2">显示</label>
             <div className="flex flex-wrap gap-2">
-              <ToggleButton checked={showTrend} onClick={() => setShowTrend(v => !v)} label="Trend" />
-              <ToggleButton checked={useLogScale} onClick={() => setUseLogScale(v => !v)} label="Log Y" />
-              <ToggleButton checked={clipOutliers} onClick={() => setClipOutliers(v => !v)} label="Clip outliers" />
+              <ToggleButton checked={showTrend} onClick={() => setShowTrend(v => !v)} label="趋势" />
+              <ToggleButton checked={useLogScale} onClick={() => setUseLogScale(v => !v)} label="对数 Y 轴" />
+              <ToggleButton checked={clipOutliers} onClick={() => setClipOutliers(v => !v)} label="截断离群值" />
             </div>
           </div>
 
           <div className="bg-gray-950 border border-gray-800 rounded-lg p-3">
-            <label className="block text-xs text-gray-400 mb-2">Series</label>
+            <label className="block text-xs text-gray-400 mb-2">序列</label>
             {lossKeys.length === 0 ? (
-              <div className="text-sm text-gray-400">No loss keys found yet.</div>
+              <div className="text-sm text-gray-400">还没有 loss 数据。</div>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {lossKeys.map(k => (
@@ -626,7 +678,7 @@ export default function JobLossGraph({ job }: Props) {
 
           <div className="bg-gray-950 border border-gray-800 rounded-lg p-3">
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs text-gray-400">Smoothing</label>
+              <label className="block text-xs text-gray-400">平滑</label>
               <span className="text-xs text-gray-300">{smoothing}%</span>
             </div>
             <input
@@ -652,7 +704,7 @@ export default function JobLossGraph({ job }: Props) {
               onChange={e => setPlotStride(Number(e.target.value))}
               className="w-full accent-blue-500"
             />
-            <div className="mt-2 text-[11px] text-gray-500">UI downsample for huge runs.</div>
+            <div className="mt-2 text-[11px] text-gray-500">超长训练时会在 UI 侧降采样。</div>
           </div>
         </div>
       </div>

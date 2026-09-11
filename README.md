@@ -1,46 +1,128 @@
 # ai-toolkit XPU（Intel Arc）适配版
 
-> 让 ai-toolkit 在 **Intel Arc / oneAPI (XPU)** 上直接训练。
-> 已验证环境：Windows + Python 3.12 + Intel Arc A770 16GB。
+> 让 ai-toolkit 在 **Intel Arc / oneAPI (XPU)** 上直接训练和出图。
+> 实测环境：Windows 11 + **Intel Arc A770 16GB** + Python 3.13；
+> Python 3.11 / 3.12 / 3.13 均可（`pyproject.toml` 声明 `>=3.11,<3.14`）。
 
-## 关于本仓库
-
-本仓库**修改自原版** [ostris/ai-toolkit](https://github.com/ostris/ai-toolkit)
-（官方 0.12.27，[Apache-2.0](LICENSE) 许可），并非独立项目。与原版的主要差异：
-
-- 新增 5 个 XPU 补丁（Intel Arc / oneAPI 支持，见 [xpu_patches/](xpu_patches/)）
-- 依赖锁定为 XPU 版本（torch 2.13.0+xpu / torchao 0.17.0+xpu，见 `requirements_base.txt`）
-- 新增一键环境脚本 `setup_xpu.bat` / `run_xpu.bat`，克隆后直接补全依赖
-- 内置中文 UI 与训练曲线图修复（可选）
-- 新增两份中文指南（改造说明 / 素材准备）
-- 移除了 `docker/` 目录：本 fork 的依赖文件面向 XPU，容器（NVIDIA/CUDA）部署请使用上游仓库
-
-原版 README 保留在下方（"Ostris AI Toolkit" 起），版权归原项目所有。
-
-## 快速开始（Windows / Intel Arc）
+**新用户只要两条命令**：装好 Git 和 Intel 显卡驱动，然后
 
 ```bat
 git clone https://github.com/JWLHS/ai-toolkit-xpu
 cd ai-toolkit-xpu
-setup_xpu.bat     :: 一键：装 git/Python → 建 venv → 装 XPU 依赖 → 下载 FFmpeg → 验证 torch.xpu
-run_xpu.bat       :: 以后日常启动 Web UI（http://localhost:8675）
+setup_xpu.bat      :: 第一次：准备 Python(uv) + XPU 依赖 + FFmpeg + UI 依赖（10~30 分钟）
+run_xpu.bat        :: 以后每次：启动中文 Web UI，自动打开 http://localhost:8675
 ```
 
-> 网络环境受限（墙内）时：把 `setup_xpu.bat` 和 `run_xpu.bat` 里的
-> `USE_CN_MIRROR` 改成 `1`。pip 优先走阿里云 PyPI 镜像（官方 PyPI 兜底，
-> 有镜像走镜像、缺货回原位），模型权重下载走 HF 镜像；
-> torch/torchao 等 XPU 轮子暂无国内镜像，仍走官方 PyTorch 索引（实测国内可达）。
+完整步骤、耗时和排错见下一节。
 
-CLI 训练：
+## 新用户上手：从克隆到开始训练
+
+### 0. 前置条件（只有这几样）
+
+| 需要 | 说明 |
+| --- | --- |
+| Windows 10/11 x64 | 本 fork 的一键脚本面向 Windows；Linux 请照 [XPU_ADAPTATION_GUIDE.md](XPU_ADAPTATION_GUIDE.md) 手动做 |
+| Intel Arc 独显 + 最新显卡驱动 | XPU 运行时随驱动安装，**不需要**单独装 oneAPI 编译器 |
+| Git | `setup_xpu.bat` 会自动补 uv / Node / FFmpeg，但不会替你装 Git |
+| 磁盘 ≥ 15GB | Python 环境约 5.5GB + UI 依赖约 1GB + 模型权重（另算） |
+
+### 1. 首次初始化（只跑一次）
 
 ```bat
-.venv-xpu\Scripts\python.exe run.py config\你的配置.yaml
+setup_xpu.bat
 ```
 
-> 完整改造说明见 [XPU_ADAPTATION_GUIDE.md](XPU_ADAPTATION_GUIDE.md)，
-> 通用素材准备与最小训练配置见 [AITOOLKIT_XPU_MINIMAL_GUIDE.md](AITOOLKIT_XPU_MINIMAL_GUIDE.md)，
-> 从官方仓库重新打补丁的 5 个补丁在 [xpu_patches/](xpu_patches/)。
-> 本仓库 `requirements_base.txt` 已是 XPU 版，`setup_xpu.bat` 会直接安装。
+它按顺序做四件事，可重复执行（幂等，中断了重跑即可）：
+
+1. 检查 Git / uv / Node，缺的自动装（uv 用官方安装脚本，Node 用 winget）
+2. `uv python install` + `uv sync`：按 `pyproject.toml` + `uv.lock` 建 `.venv`（Python 3.13），装 XPU 版 torch / torchao / triton-xpu（约 5.5GB，71 秒实测是千兆网速下的本机结果）
+3. 下载 FFmpeg 8.1 full-shared 到 `ffmpeg-shared/`（torchcodec 依赖，约 70MB）
+4. 装 UI 依赖 `ui/node_modules` 并生成 Prisma 数据库客户端
+
+最后打印出 `xpu available: True` 和你的显卡名，就算成了。
+
+耗时：网络好 10 分钟上下；国内网络建议先把脚本开头的 `USE_CN_MIRROR` 改成 `1`
+（PyPI 走阿里云镜像、模型下载走 hf-mirror，官方源兜底；torch/torchao 的 XPU
+轮子没有国内镜像，仍走官方 PyTorch 索引，实测国内可达）。
+
+### 1.5 资源监控（不需要额外装东西）
+
+UI 里 GPU/CPU 卡片的数据是这套顺序取到的，**全自动**：
+
+| 顺序 | 数据源 | 需要装什么 | 能读到 |
+| --- | --- | --- | --- |
+| 1（默认） | **Level Zero Sysman**（`ze_loader.dll`，随 Intel 显卡驱动安装） | 无 | 型号、显存、负载、温度、功耗、频率 |
+| 2（可选） | Intel XPU Manager（`xpu-smi`） | 手动装；装了就作为第二顺位 | 同上，另有多媒体引擎/带宽等（UI 未展示） |
+| 3（兜底） | `torch.xpu` | 环境里本来就有 | 型号、显存（无温度/功耗/频率） |
+
+想强制指定数据源，设环境变量 `AI_TOOLKIT_XPU_MONITOR=zes|xpu-smi|torch`（不加就是自动）。
+风扇转速不显示：Intel 的 Sysman 在 Arc 上返回“无转速传感器”，`xpu-smi` 的指标表里也没有这一项。
+
+### 2. 启动 Web UI（每次）
+
+```bat
+run_xpu.bat
+```
+
+脚本会自动挑 `.venv`（没有则回退 `.venv-xpu`）、把 FFmpeg 加进 PATH、
+缺 UI 依赖就自动 `npm install` + `prisma generate/db push` + `npm run build`，
+然后起在 <http://localhost:8675> 并打开浏览器。UI 是**中文界面**
+（词条在 [ui_i18n/](ui_i18n/)，用 `scripts/localize_ui.py` 应用），loss 曲线图正常显示。
+
+训练流程就是 UI 里点「新建训练任务」：选模型、填素材目录、设步数和分辨率。
+16GB 显存跑大模型时，在任务高级设置里打开「层级卸载」（把权重放到内存）和
+「低显存」相关选项，能明显减少溢出到共享显存。
+
+### 3. 命令行训练（可选，无 UI）
+
+```bat
+.venv\Scripts\python.exe run.py config\你的配置.yaml
+```
+
+`config/` 目录里有可直接照抄的配置示例；训练日志和 loss 曲线会写到 `output/` 和 `logs/`。
+
+### 4. 出问题先看这几条
+
+| 现象 | 处理 |
+| --- | --- |
+| `torch.xpu.is_available()` 为 False | 更新 Intel 显卡驱动；确认用的是 Arc 独显而不是核显 |
+| 下载卡住 / 超时 | 把 `USE_CN_MIRROR` 改成 `1`，重跑 `setup_xpu.bat` |
+| 打开 8675 没反应 | 先跑完 `setup_xpu.bat`（装 UI 依赖）再 `run_xpu.bat`；残留进程占端口就跑 `stop_xpu.bat` 再重开 |
+| 跑完想彻底关掉 | 双击 `stop_xpu.bat`：只结束本目录下的 node/python（含正在跑的训练、TensorBoard），不会误杀其它程序 |
+| 显存溢出到共享显存 | 调高「层级卸载」比例、降低分辨率/桶尺寸；原理与调优见 [XPU_ADAPTATION_GUIDE.md](XPU_ADAPTATION_GUIDE.md) |
+| 想换 Python 版本 | `uv python pin 3.12` 然后 `uv sync`，不用删环境 |
+
+## 关于本仓库
+
+本仓库**修改自原版** [ostris/ai-toolkit](https://github.com/ostris/ai-toolkit)
+（代码基线官方 0.12.27，UI 已对齐官方 0.13.6，[Apache-2.0](LICENSE) 许可），并非独立项目。
+与原版的主要差异：
+
+- 新增 5 个 XPU 补丁（Intel Arc / oneAPI 支持，见 [xpu_patches/](xpu_patches/)）
+- 依赖改用 `pyproject.toml` + `uv.lock` 锁定：torch / torchvision / torchaudio / torchao / triton-xpu
+  指向 XPU 轮子（torch 2.13.0+xpu、torchao 0.17.0+xpu），其余依赖跟随官方版本
+- 新增一键脚本 `setup_xpu.bat` / `run_xpu.bat`，克隆后自动补全环境与 UI 依赖
+- 中文 UI：词条词典 [ui_i18n/zh-CN.json](ui_i18n/zh-CN.json) + 应用脚本 [scripts/localize_ui.py](scripts/localize_ui.py)，
+  UI 代码本体同步到官方 0.13.6，后续跟版只补词典
+- 修复 XPU 显存一直涨/溢出到共享显存（分块搬运 + 分配器缓存回收），
+  以及 XPU 不支持 fp64 的算子路径（rope 等改为 fp32）
+- 移除 `docker/`：本 fork 的依赖文件面向 XPU，容器（NVIDIA/CUDA）部署请用上游仓库
+
+文档：
+
+- [XPU_ADAPTATION_GUIDE.md](XPU_ADAPTATION_GUIDE.md)：改造说明（环境、补丁、显存调优、FAQ）
+- [AITOOLKIT_XPU_MINIMAL_GUIDE.md](AITOOLKIT_XPU_MINIMAL_GUIDE.md)：素材准备与最小训练配置
+- [xpu_patches/](xpu_patches/)：从官方仓库重新打补丁的 5 个补丁
+
+## 致谢 / Credits
+
+- [ostris/ai-toolkit](https://github.com/ostris/ai-toolkit)：上游项目，本仓库的全部训练能力都来自它。
+- [allanmeng/ComfyUI-XPUSYS-Monitor](https://github.com/allanmeng/ComfyUI-XPUSYS-Monitor)：`scripts/xpu_metrics_zes.py`
+  的 Level Zero Sysman 用法（结构体偏移、初始化顺序）参考了该项目的 `providers/intel.py`。
+- [lodestone-rock/RamTorch](https://github.com/lodestone-rock/RamTorch)：层级卸载（把权重放到内存）功能来自上游。
+- Intel oneAPI / PyTorch XPU：`torch 2.13.0+xpu`、`torchao 0.17.0+xpu` 等轮子的提供方。
+
+原版 README 保留在下方（"Ostris AI Toolkit" 起），版权归原项目所有。
 
 ---
 

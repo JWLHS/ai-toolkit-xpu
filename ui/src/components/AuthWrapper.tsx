@@ -70,7 +70,7 @@ export default function AuthWrapper({ authRequired, children }: AuthWrapperProps
     setError('');
 
     if (!token.trim()) {
-      setError('Please enter your token');
+      setError('请输入令牌');
       return;
     }
 
@@ -124,7 +124,7 @@ export default function AuthWrapper({ authRequired, children }: AuthWrapperProps
                 ref={inputRef}
                 onChange={e => setToken(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 text-gray-100 transition duration-200"
-                placeholder="Enter your password"
+                placeholder="请输入密码"
               />
               <div className='text-gray-500 text-xs mt-2'>
                 The password is set with the environment variable AI_TOOLKIT_AUTH, the default is the super secure secret word "password"
@@ -155,7 +155,7 @@ export default function AuthWrapper({ authRequired, children }: AuthWrapperProps
                   ></path>
                 </svg>
               ) : (
-                'Check Password'
+                '校验密码'
               )}
             </button>
           </form>

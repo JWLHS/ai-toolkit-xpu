@@ -2,7 +2,7 @@ import Loading from './Loading';
 import classNames from 'classnames';
 
 export interface TableColumn {
-  title: string;
+  title: React.ReactNode;
   key: string;
   render?: (row: any) => React.ReactNode;
   className?: string;
@@ -40,7 +40,7 @@ export default function UniversalTable({
             onClick={() => onRefresh()}
             className="mt-2 px-3 py-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded transition-colors"
           >
-            Refresh
+            刷新
           </button>
         </div>
       ) : (

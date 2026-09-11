@@ -7,18 +7,32 @@ import {
   quantizationOptions,
   defaultQtype,
   jobTypeOptions,
+  SampleTags,
 } from './options';
-import { defaultDatasetConfig } from './jobConfig';
+import { defaultCompileOptions, defaultDatasetConfig } from './jobConfig';
 import { GroupedSelectOption, JobConfig, SelectOption } from '@/types';
-import { objectCopy } from '@/utils/basic';
-import { TextInput, SelectInput, Checkbox, FormGroup, NumberInput, SliderInput } from '@/components/formInputs';
+import { objectCopy, tagsToObj, objToTags } from '@/utils/basic';
+import {
+  TextInput,
+  TextAreaInput,
+  SelectInput,
+  Checkbox,
+  FormGroup,
+  NumberInput,
+  SliderInput,
+  CreatableSelectInput,
+} from '@/components/formInputs';
 import Card from '@/components/Card';
-import { X } from 'lucide-react';
+import { X, Copy, Wand2, SquareDashed, Info } from 'lucide-react';
+import { openDoc } from '@/components/DocModal';
+import { openUpsamplePromptsModal, toAspectRatio } from '@/components/UpsamplePromptsModal';
+import { openPromptBoxEditor } from '@/components/PromptBoxEditorModal';
 import AddSingleImageModal, { openAddImageModal } from '@/components/AddSingleImageModal';
 import SampleControlImage from '@/components/SampleControlImage';
 import { FlipHorizontal2, FlipVertical2 } from 'lucide-react';
 import { handleModelArchChange } from './utils';
 import { IoFlaskSharp } from 'react-icons/io5';
+import { isMac } from '@/helpers/basic';
 
 type Props = {
   jobConfig: JobConfig;
@@ -30,6 +44,7 @@ type Props = {
   setGpuIDs: (value: string | null) => void;
   gpuList: any;
   datasetOptions: any;
+  isLoading?: boolean;
 };
 
 const isDev = process.env.NODE_ENV === 'development';
@@ -44,6 +59,7 @@ export default function SimpleJob({
   setGpuIDs,
   gpuList,
   datasetOptions,
+  isLoading,
 }: Props) {
   const modelArch = useMemo(() => {
     return modelArchs.find(a => a.name === jobConfig.config.process[0].model.arch) as ModelArch;
@@ -65,6 +81,44 @@ export default function SimpleJob({
   }, [modelArch, jobType]);
 
   const isVideoModel = !!(modelArch?.group === 'video');
+  const isAudioModel = !!(modelArch?.group === 'audio');
+
+  const taggedSampleArr: Record<string, any>[] | null = useMemo(() => {
+    if (!modelArch) return null;
+    if (!modelArch.sampleTags) return null;
+    if (!jobConfig.config.process[0].sample.samples) return null;
+    let sampleArr: any[] = [];
+    for (let i = 0; i < jobConfig.config.process[0].sample.samples.length; i++) {
+      const taggedPrompt = jobConfig.config.process[0].sample.samples[i].prompt;
+      const tagsObj = tagsToObj(taggedPrompt);
+      sampleArr.push(tagsObj);
+    }
+    return sampleArr;
+  }, [modelArch, jobConfig.config.process[0].sample.samples]);
+
+  const modelArchTagSections: SampleTags[] | null = useMemo(() => {
+    if (!modelArch?.sampleTags) return null;
+    const maxPerGroup = 5;
+    let sections: SampleTags[] = [];
+    let subSection: SampleTags = {};
+    for (const [tagKey, tag] of Object.entries(modelArch.sampleTags)) {
+      if ((tag.full && Object.keys(subSection).length > 0) || Object.keys(subSection).length >= maxPerGroup) {
+        // reset the sub section build if the next tag is full or max per group is reached
+        sections.push(subSection);
+        subSection = {};
+      }
+      subSection[tagKey] = tag;
+      if (tag.full) {
+        // if the tag is full, push the section immediately and reset the sub section build
+        sections.push(subSection);
+        subSection = {};
+      }
+    }
+    if (Object.keys(subSection).length > 0) {
+      sections.push(subSection);
+    }
+    return sections.length > 0 ? sections : null;
+  }, [modelArch]);
 
   const numTopCards = useMemo(() => {
     let count = 4; // job settings, model config, target config, save config
@@ -110,7 +164,7 @@ export default function SimpleJob({
     }
     let newQuantizationOptions = [
       {
-        label: 'Standard',
+        label: '标准',
         options: [quantizationOptions[0], quantizationOptions[1]],
       },
     ];
@@ -124,7 +178,7 @@ export default function SimpleJob({
     }
     if (ARAs.length > 0) {
       newQuantizationOptions.push({
-        label: 'Accuracy Recovery Adapters',
+        label: '精度恢复适配器',
         options: ARAs,
       });
     }
@@ -137,16 +191,51 @@ export default function SimpleJob({
     }
     if (additionalQuantizationOptions.length > 0) {
       newQuantizationOptions.push({
-        label: 'Additional Quantization Options',
+        label: '附加量化选项',
         options: additionalQuantizationOptions,
       });
     }
     return newQuantizationOptions;
   }, [modelArch]);
 
+  const showGPUSelect = !isMac();
+
+  const validationConfig = jobConfig.config.process[0].train.validation_config;
+
+  let numDatasetCols = 4;
+  let numSampleTopCols = 4;
+  let datasetStyleClass = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6';
+  let sampleTopStyleClass = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6';
+  if (isVideoModel) {
+    numSampleTopCols += 1;
+  }
+  if (isAudioModel) {
+    numDatasetCols -= 1;
+    numSampleTopCols -= 1;
+  }
+  if (numDatasetCols == 3) {
+    datasetStyleClass = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
+  }
+  if (numSampleTopCols == 5) {
+    sampleTopStyleClass = 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6';
+  }
+  if (numSampleTopCols == 3) {
+    sampleTopStyleClass = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
+  }
   return (
     <>
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form
+        onSubmit={handleSubmit}
+        className={`space-y-8 relative ${isLoading ? 'pointer-events-none opacity-50' : ''}`}
+      >
+        {isLoading && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-400 border-t-blue-500" />
+              <span className="text-sm text-gray-400">加载中…</span>
+            </div>
+          </div>
+        )}
         <div className={topBarClass}>
           <Card title="任务">
             <TextInput
@@ -158,13 +247,15 @@ export default function SimpleJob({
               disabled={runId !== null}
               required
             />
-            <SelectInput
-              label="GPU 编号"
-              value={`${gpuIDs}`}
-              docKey="gpuids"
-              onChange={value => setGpuIDs(value)}
-              options={gpuList.map((gpu: any) => ({ value: `${gpu.index}`, label: `GPU #${gpu.index}` }))}
-            />
+            {showGPUSelect && (
+              <SelectInput
+                label="GPU 编号"
+                value={`${gpuIDs}`}
+                docKey="gpuids"
+                onChange={value => setGpuIDs(value)}
+                options={gpuList.map((gpu: any) => ({ value: `${gpu.index}`, label: `GPU #${gpu.index}` }))}
+              />
+            )}
             {disableSections.includes('trigger_word') ? null : (
               <TextInput
                 label="触发词"
@@ -187,7 +278,6 @@ export default function SimpleJob({
             <SelectInput
               label="模型架构"
               value={jobConfig.config.process[0].model.arch}
-              docKey="config.process[0].model.arch"
               onChange={value => {
                 handleModelArchChange(jobConfig.config.process[0].model.arch, value, jobConfig, setJobConfig);
               }}
@@ -208,7 +298,7 @@ export default function SimpleJob({
             />
             {modelArch?.additionalSections?.includes('model.assistant_lora_path') && (
               <TextInput
-                label="Training Adapter Path"
+                label="训练适配器路径"
                 value={jobConfig.config.process[0].model.assistant_lora_path ?? ''}
                 docKey="config.process[0].model.assistant_lora_path"
                 onChange={(value: string | undefined) => {
@@ -220,15 +310,117 @@ export default function SimpleJob({
                 placeholder=""
               />
             )}
+            {modelArch?.additionalSections?.includes('model.unconditional_lora_path') && (
+              <TextInput
+                label="无条件适配器路径"
+                value={jobConfig.config.process[0].model.unconditional_lora_path ?? ''}
+                docKey="config.process[0].model.unconditional_lora_path"
+                onChange={(value: string | undefined) => {
+                  if (value?.trim() === '') {
+                    value = undefined;
+                  }
+                  setJobConfig(value, 'config.process[0].model.unconditional_lora_path');
+                }}
+                placeholder=""
+              />
+            )}
+            {modelArch?.customModelSelectOptions?.map(customOption => (
+              <SelectInput
+                key={customOption.label}
+                label={customOption.label}
+                value={customOption.getValue(jobConfig) ?? ''}
+                doc={customOption.doc}
+                onChange={value => customOption.onChange(value, jobConfig, setJobConfig)}
+                options={customOption.options}
+              />
+            ))}
+            {modelArch?.modelNotes && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const gateUrl = modelArch.gateUrl as string;
+                    openDoc({
+                      title: `Notes - ${modelArch.label}`,
+                      description: <div className="space-y-3">{modelArch.modelNotes}</div>,
+                    });
+                  }}
+                  className="w-full flex items-center gap-2 rounded-md bg-blue-950/60 border border-blue-800 px-3 py-2 text-sm text-blue-200 hover:bg-blue-900/60 text-left"
+                >
+                  <Info className="w-4 h-4 shrink-0 text-blue-400" />
+                  <span>模型说明</span>
+                </button>
+              </div>
+            )}
+            {modelArch?.gateUrl && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const gateUrl = modelArch.gateUrl as string;
+                    openDoc({
+                      title: 'balanced ｜ 均衡 ｜ 兼顾形体结构与细节纹理（通用推荐）',
+                      description: (
+                        <div className="space-y-3">
+                          <p>
+                            This model is gated on Huggingface. Before you can use it, you will need to accept the model
+                            terms on the model page:
+                          </p>
+                          <p>
+                            <a
+                              href={gateUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 underline"
+                            >
+                              {gateUrl}
+                            </a>
+                          </p>
+                          <p>
+                            You will also need to create a Huggingface{' '}
+                            <a
+                              href="https://huggingface.co/settings/tokens"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 underline"
+                            >
+                              read token
+                            </a>{' '}
+                            and add it on the{' '}
+                            <a href="/settings" className="text-blue-400 hover:text-blue-300 underline">
+                              settings page
+                            </a>
+                            .
+                          </p>
+                        </div>
+                      ),
+                    });
+                  }}
+                  className="w-full flex items-center gap-2 rounded-md bg-yellow-950/60 border border-yellow-800 px-3 py-2 text-sm text-yellow-200 hover:bg-yellow-900/60 text-left"
+                >
+                  <Info className="w-4 h-4 shrink-0 text-yellow-400" />
+                  <span>
+                    Gated model. <span className="underline">Learn more.</span>
+                  </span>
+                </button>
+              </div>
+            )}
             {modelArch?.additionalSections?.includes('model.low_vram') && (
               <FormGroup label="选项">
                 <Checkbox
                   label="低显存"
                   checked={jobConfig.config.process[0].model.low_vram}
                   onChange={value => setJobConfig(value, 'config.process[0].model.low_vram')}
-                  docKey="model.low_vram"
                 />
               </FormGroup>
+            )}
+            {modelArch?.additionalSections?.includes('model.model_kwargs.kv_cache') && (
+              <Checkbox
+                label="启用 I2V"
+                docKey="model.model_kwargs.kv_cache"
+                checked={jobConfig.config.process[0].model.model_kwargs.kv_cache || false}
+                onChange={value => setJobConfig(value, 'config.process[0].model.model_kwargs.kv_cache')}
+              />
             )}
             {modelArch?.additionalSections?.includes('model.qie.match_target_res') && (
               <Checkbox
@@ -238,7 +430,7 @@ export default function SimpleJob({
                 onChange={value => setJobConfig(value, 'config.process[0].model.model_kwargs.match_target_res')}
               />
             )}
-            {modelArch?.additionalSections?.includes('model.layer_offloading') && (
+            {modelArch?.additionalSections?.includes('model.layer_offloading') && !isMac() && (
               <>
                 <Checkbox
                   label={
@@ -263,7 +455,6 @@ export default function SimpleJob({
                       min={0}
                       max={100}
                       step={1}
-                      docKey="model.layer_offloading_transformer_percent"
                     />
                     <SliderInput
                       label="文本编码器卸载百分比"
@@ -276,7 +467,6 @@ export default function SimpleJob({
                       min={0}
                       max={100}
                       step={1}
-                      docKey="model.layer_offloading_text_encoder_percent"
                     />
                   </div>
                 )}
@@ -299,19 +489,42 @@ export default function SimpleJob({
                 }}
                 options={transformerQuantizationOptions}
               />
-              <SelectInput
-                label="文本编码器"
-                value={jobConfig.config.process[0].model.quantize_te ? jobConfig.config.process[0].model.qtype_te : ''}
-                onChange={value => {
-                  if (value === '') {
-                    setJobConfig(false, 'config.process[0].model.quantize_te');
-                    value = defaultQtype;
-                  } else {
-                    setJobConfig(true, 'config.process[0].model.quantize_te');
+              {!disableSections.includes('model.quantize_te') && (
+                <SelectInput
+                  label="文本编码器"
+                  value={
+                    jobConfig.config.process[0].model.quantize_te ? jobConfig.config.process[0].model.qtype_te : ''
                   }
-                  setJobConfig(value, 'config.process[0].model.qtype_te');
+                  onChange={value => {
+                    if (value === '') {
+                      setJobConfig(false, 'config.process[0].model.quantize_te');
+                      value = defaultQtype;
+                    } else {
+                      setJobConfig(true, 'config.process[0].model.quantize_te');
+                    }
+                    setJobConfig(value, 'config.process[0].model.qtype_te');
+                  }}
+                  options={quantizationOptions}
+                />
+              )}
+              <FormGroup label="编译选项">
+                <></>
+              </FormGroup>
+              <Checkbox
+                label="编译模型"
+                checked={jobConfig.config.process[0].model.compile || false}
+                onChange={value => {
+                  setJobConfig(value, 'config.process[0].model.compile');
+                  if (value) {
+                    for (const key in defaultCompileOptions) {
+                      setJobConfig((defaultCompileOptions as any)[key], `config.process[0].model.${key}`);
+                    }
+                  } else {
+                    for (const key in defaultCompileOptions) {
+                      setJobConfig(undefined, `config.process[0].model.${key}`);
+                    }
+                  }
                 }}
-                options={quantizationOptions}
               />
             </Card>
           )}
@@ -344,7 +557,6 @@ export default function SimpleJob({
             <SelectInput
               label="目标类型"
               value={jobConfig.config.process[0].network?.type ?? 'lora'}
-              docKey="config.process[0].network.type"
               onChange={value => setJobConfig(value, 'config.process[0].network.type')}
               options={[
                 { value: 'lora', label: 'LoRA' },
@@ -355,7 +567,6 @@ export default function SimpleJob({
               <SelectInput
                 label="LoKr 因子"
                 value={`${jobConfig.config.process[0].network?.lokr_factor ?? -1}`}
-                docKey="config.process[0].network.lokr_factor"
                 onChange={value => setJobConfig(parseInt(value), 'config.process[0].network.lokr_factor')}
                 options={[
                   { value: '-1', label: 'Auto' },
@@ -380,7 +591,6 @@ export default function SimpleJob({
                   min={0}
                   max={1024}
                   required
-                  docKey="config.process[0].network.linear"
                 />
                 {disableSections.includes('network.conv') ? null : (
                   <NumberInput
@@ -394,7 +604,6 @@ export default function SimpleJob({
                     placeholder="eg. 16"
                     min={0}
                     max={1024}
-                    docKey="config.process[0].network.conv"
                   />
                 )}
               </>
@@ -472,7 +681,6 @@ export default function SimpleJob({
                   placeholder="eg. 4"
                   min={1}
                   required
-                  docKey="train.batch_size"
                 />
                 <NumberInput
                   label="梯度累计"
@@ -482,7 +690,6 @@ export default function SimpleJob({
                   placeholder="eg. 1"
                   min={1}
                   required
-                  docKey="train.gradient_accumulation"
                 />
                 <NumberInput
                   label="总步数"
@@ -492,7 +699,6 @@ export default function SimpleJob({
                   placeholder="eg. 2000"
                   min={1}
                   required
-                  docKey="train.steps"
                 />
               </div>
               <div>
@@ -501,11 +707,16 @@ export default function SimpleJob({
                   value={jobConfig.config.process[0].train.optimizer}
                   onChange={value => setJobConfig(value, 'config.process[0].train.optimizer')}
                   options={[
+                    { value: 'adafactor', label: 'Adafactor' },
+                    { value: 'adam', label: 'Adam' },
                     { value: 'adamw', label: 'AdamW' },
                     { value: 'adamw8bit', label: 'AdamW8Bit' },
-                    { value: 'adafactor', label: 'Adafactor' },
+                    { value: 'automagic', label: '自动优化' },
+                    { value: 'automagic2', label: '自动优化 v2' },
+                    { value: 'automagic3', label: '自动优化 v3' },
+                    { value: 'prodigyopt', label: 'Prodigy' },
+                    { value: 'prodigy8bit', label: 'Prodigy8Bit' },
                   ]}
-                  docKey="train.optimizer"
                 />
                 <NumberInput
                   label="学习率"
@@ -515,7 +726,6 @@ export default function SimpleJob({
                   placeholder="eg. 0.0001"
                   min={0}
                   required
-                  docKey="train.lr"
                 />
                 <NumberInput
                   label="权重衰减"
@@ -525,7 +735,6 @@ export default function SimpleJob({
                   placeholder="eg. 0.0001"
                   min={0}
                   required
-                  docKey="train.optimizer_params.weight_decay"
                 />
               </div>
               <div>
@@ -536,28 +745,11 @@ export default function SimpleJob({
                     disabled={disableSections.includes('train.timestep_type') || false}
                     onChange={value => setJobConfig(value, 'config.process[0].train.timestep_type')}
                     options={[
-                      {
-                        value: 'linear',
-                        label:
-                          'linear ｜ 线性 ｜ 均匀采样噪声强度（0→1） ｜ 稳定、最通用 ｜ 人像、风格微调',
-                      },
-                      {
-                        value: 'weighted',
-                        label:
-                          'weighted ｜ 加权 ｜ 高噪声区域采样权重更高 ｜ 结构保持强 ｜ 背景、动作较复杂的图像',
-                      },
-                      {
-                        value: 'shift',
-                        label:
-                          'shift ｜ 偏移 ｜ 对采样分布做偏移，偏向低噪或高噪（根据偏移方向） ｜ 可强化细节或轮廓 ｜ 实验调优用',
-                      },
-                      {
-                        value: 'sigmoid',
-                        label:
-                          'sigmoid ｜ S 型 ｜ 使用 S 型曲线偏置中段时间步 ｜ 细节与稳定性兼顾 ｜ 高质量模型推荐',
-                      },
+                      { value: 'sigmoid', label: 'Sigmoid' },
+                      { value: 'linear', label: '线性' },
+                      { value: 'shift', label: 'Shift' },
+                      { value: 'weighted', label: '加权' },
                     ]}
-                    docKey="train.timestep_type"
                   />
                 )}
                 <SelectInput
@@ -566,20 +758,10 @@ export default function SimpleJob({
                   value={jobConfig.config.process[0].train.content_or_style}
                   onChange={value => setJobConfig(value, 'config.process[0].train.content_or_style')}
                   options={[
-                    {
-                      value: 'balanced',
-                      label: 'balanced ｜ 均衡 ｜ 兼顾形体结构与细节纹理（通用推荐）',
-                    },
-                    {
-                      value: 'content',
-                      label: 'high noise ｜ 高噪声 ｜ 形体/结构偏向 ｜ 强化形体、轮廓与结构稳定性',
-                    },
-                    {
-                      value: 'style',
-                      label: 'low noise ｜ 低噪声 ｜ 细节/纹理偏向 ｜ 提升细节锐度与纹理表现',
-                    },
+                    { value: 'balanced', label: '平衡' },
+                    { value: 'content', label: '高噪声' },
+                    { value: 'style', label: '低噪声' },
                   ]}
-                  docKey="train.content_or_style"
                 />
                 <SelectInput
                   label="损失类型"
@@ -587,29 +769,23 @@ export default function SimpleJob({
                   value={jobConfig.config.process[0].train.loss_type}
                   onChange={value => setJobConfig(value, 'config.process[0].train.loss_type')}
                   options={[
-                    {
-                      value: 'mse',
-                      label:
-                        'mean squared error (MSE) ｜ 均方误差 ｜ 标准 L2 损失，最常见 ｜ 稳定但偏向模糊 ｜ 默认、安全',
-                    },
-                    {
-                      value: 'mae',
-                      label:
-                        'mean absolute error (MAE) ｜ 平均绝对误差 ｜ L1 损失，更保守 ｜ 较保细节但慢 ｜ 小数据集或高保真 LoRA',
-                    },
-                    {
-                      value: 'wavelet',
-                      label:
-                        'wavelet ｜ 小波 ｜ 在小波域计算误差，强调纹理 ｜ 能强化细节和锐度 ｜ 人物皮肤、衣料质感 LoRA',
-                    },
-                    {
-                      value: 'stepped',
-                      label:
-                        'stepped recovery ｜ 阶梯恢复 ｜ 分阶段权重损失，对高噪更容忍 ｜ 学习快但风险高 ｜ 快速训练',
-                    },
+                    { value: 'mse', label: '均方误差' },
+                    { value: 'mae', label: '平均绝对误差' },
+                    { value: 'wavelet', label: '小波' },
+                    { value: 'stepped', label: '阶梯恢复' },
                   ]}
-                  docKey="train.loss_type"
                 />
+                {modelArch?.additionalSections?.includes('train.audio_loss_multiplier') && (
+                  <NumberInput
+                    label="音频损失倍率"
+                    className="pt-2"
+                    value={jobConfig.config.process[0].train.audio_loss_multiplier ?? 1.0}
+                    onChange={value => setJobConfig(value, 'config.process[0].train.audio_loss_multiplier')}
+                    placeholder="eg. 1.0"
+                    docKey={'train.audio_loss_multiplier'}
+                    min={0}
+                  />
+                )}
               </div>
               <div>
                 <FormGroup label="EMA（指数移动平均）">
@@ -625,13 +801,13 @@ export default function SimpleJob({
                     label="EMA 衰减率"
                     className="pt-2"
                     value={jobConfig.config.process[0].train.ema_config?.ema_decay as number}
-                    onChange={value => setJobConfig(value, 'config.process[0].train.ema_config?.ema_decay')}
+                    onChange={value => setJobConfig(value, 'config.process[0].train.ema_config.ema_decay')}
                     placeholder="eg. 0.99"
                     min={0}
                   />
                 )}
 
-                <FormGroup label="文本编码器优化" className="pt-2">
+                <FormGroup label="高级采样" className="pt-2">
                   {!disableSections.includes('train.unload_text_encoder') && (
                     <Checkbox
                       label="卸载文本编码器"
@@ -738,12 +914,174 @@ export default function SimpleJob({
                     )}
                   </>
                 )}
+                <FormGroup label="其他" className="pt-2">
+                  <>
+                    <Checkbox
+                      label="对比引导损失"
+                      docKey={'train.do_guidance_loss'}
+                      className="pt-1"
+                      checked={jobConfig.config.process[0].train.do_guidance_loss || false}
+                      onChange={value => {
+                        if (value) {
+                          setJobConfig(true, 'config.process[0].train.do_guidance_loss');
+                          if (!jobConfig.config.process[0].train.guidance_loss_target) {
+                            setJobConfig(4.0, 'config.process[0].train.guidance_loss_target');
+                          }
+                        } else {
+                          setJobConfig(undefined, 'config.process[0].train.do_guidance_loss');
+                          setJobConfig(undefined, 'config.process[0].train.guidance_loss_target');
+                        }
+                      }}
+                    />
+                    {jobConfig.config.process[0].train.do_guidance_loss && (
+                      <>
+                        <NumberInput
+                          label="引导损失目标"
+                          docKey={'train.guidance_loss_target'}
+                          value={(jobConfig.config.process[0].train.guidance_loss_target as number) || 4.0}
+                          onChange={value => setJobConfig(value, 'config.process[0].train.guidance_loss_target')}
+                          placeholder="eg. 3.0"
+                          min={0}
+                        />
+                      </>
+                    )}
+                  </>
+                </FormGroup>
               </div>
             </div>
           </Card>
         </div>
         <div>
-<Card title="高级设置" collapsible>
+          <Card
+            title="验证"
+            toggled={!!validationConfig}
+            onToggle={value => {
+              if (value) {
+                setJobConfig(
+                  {
+                    validation_items: [{ image_path: '', prompt: '' }],
+                    resolution: 1024,
+                    validate_every_n_steps: 1,
+                    validation_sigmas: [0.5],
+                  },
+                  'config.process[0].train.validation_config',
+                );
+              } else {
+                setJobConfig(undefined, 'config.process[0].train.validation_config');
+              }
+            }}
+          >
+            {validationConfig && (
+              <>
+                <p className="text-sm text-gray-400 mb-4">
+                  验证会用一组固定图片做稳定的 loss 检查：每张图在启动时只编码一次，再用固定随机种子在选定的 sigma 上预测，
+                  因此结果始终一致，可以在整个训练过程中横向比较。每次验证的平均 loss 会记录为 val/loss。
+                  验证图片的内容要与你数据集中的概念一致，但{' '}
+                  <span className="font-bold text-gray-300">不要把验证图放进数据集</span>。
+                  它们应该是包含你想训练的概念、但没有参与训练的图片。
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <NumberInput
+                    label="验证间隔"
+                    value={validationConfig.validate_every_n_steps}
+                    onChange={value =>
+                      setJobConfig(value, 'config.process[0].train.validation_config.validate_every_n_steps')
+                    }
+                    placeholder="eg. 10"
+                    min={1}
+                    required
+                  />
+                  <NumberInput
+                    label="验证分辨率"
+                    value={validationConfig.resolution}
+                    onChange={value => setJobConfig(value, 'config.process[0].train.validation_config.resolution')}
+                    placeholder="eg. 512"
+                    min={64}
+                    required
+                  />
+                  <SelectInput
+                    label="验证 Sigma"
+                    value={(validationConfig.validation_sigmas ?? [1.0, 0.75, 0.5, 0.25]).join(', ')}
+                    onChange={value =>
+                      setJobConfig(
+                        value.split(',').map((v: string) => parseFloat(v)),
+                        'config.process[0].train.validation_config.validation_sigmas',
+                      )
+                    }
+                    options={[
+                      { value: '0.5', label: '0.5' },
+                      { value: '1, 0.5', label: '1.0, 0.5' },
+                      { value: '1, 0.66, 0.33', label: '1.0, 0.66, 0.33' },
+                      { value: '1, 0.75, 0.5, 0.25', label: '1.0, 0.75, 0.5, 0.25' },
+                    ]}
+                  />
+                </div>
+                <div className="mt-4">
+                  <label className="block text-xs text-gray-300 mb-2">
+                    验证图片（{validationConfig.validation_items.length}）
+                  </label>
+                  {validationConfig.validation_items.map((item, i) => (
+                    <div key={i} className="rounded-lg pl-4 pr-1 py-3 mb-4 bg-gray-950">
+                      <div className="flex items-center space-x-4">
+                        <SampleControlImage
+                          instruction="添加图片"
+                          src={item.image_path === '' ? null : item.image_path}
+                          onNewImageSelected={imagePath => {
+                            setJobConfig(
+                              imagePath ?? '',
+                              `config.process[0].train.validation_config.validation_items[${i}].image_path`,
+                            );
+                          }}
+                        />
+                        <div className="flex-1">
+                          <TextInput
+                            label="BPP 损失倍率"
+                            value={item.prompt}
+                            onChange={value =>
+                              setJobConfig(
+                                value,
+                                `config.process[0].train.validation_config.validation_items[${i}].prompt`,
+                              )
+                            }
+                            placeholder="输入提示词"
+                          />
+                        </div>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setJobConfig(
+                                validationConfig.validation_items.filter((_, index) => index !== i),
+                                'config.process[0].train.validation_config.validation_items',
+                              )
+                            }
+                            className="rounded-full p-1 text-sm"
+                          >
+                            <X />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setJobConfig(
+                        [...validationConfig.validation_items, { image_path: '', prompt: '' }],
+                        'config.process[0].train.validation_config.validation_items',
+                      )
+                    }
+                    className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                  >
+                    添加验证图片
+                  </button>
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
+        <div>
+          <Card title="高级设置" collapsible>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
                 <Checkbox
@@ -786,20 +1124,36 @@ export default function SimpleJob({
             <>
               {jobConfig.config.process[0].datasets.map((dataset, i) => (
                 <div key={i} className="p-4 rounded-lg bg-gray-800 relative">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setJobConfig(
-                        jobConfig.config.process[0].datasets.filter((_, index) => index !== i),
-                        'config.process[0].datasets',
-                      )
-                    }
-                    className="absolute top-2 right-2 bg-red-800 hover:bg-red-700 rounded-full p-1 text-sm transition-colors"
-                  >
-                    <X />
-                  </button>
-                  <h2 className="text-lg font-bold mb-4">数据集 {i + 1}</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const duplicated = objectCopy(dataset);
+                        const datasets = [...jobConfig.config.process[0].datasets];
+                        datasets.splice(i + 1, 0, duplicated);
+                        setJobConfig(datasets, 'config.process[0].datasets');
+                      }}
+                      className="bg-gray-700 hover:bg-gray-600 rounded-full p-2 text-sm transition-colors"
+                      title="复制数据集"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setJobConfig(
+                          jobConfig.config.process[0].datasets.filter((_, index) => index !== i),
+                          'config.process[0].datasets',
+                        )
+                      }
+                      className="bg-red-600 hover:bg-red-700 text-white rounded-full p-2 text-sm transition-colors"
+                      title="移除数据集"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <h2 className="text-lg font-bold mb-4">Dataset {i + 1}</h2>
+                  <div className={datasetStyleClass}>
                     <div>
                       <SelectInput
                         label="目标数据集"
@@ -869,31 +1223,63 @@ export default function SimpleJob({
                         onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].network_weight`)}
                         placeholder="eg. 1.0"
                       />
+                      <NumberInput
+                        label="差分引导强度"
+                        value={dataset.num_repeats || 1}
+                        className="pt-2"
+                        onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].num_repeats`)}
+                        placeholder="eg. 1"
+                        docKey={'dataset.num_repeats'}
+                      />
+                      <NumberInput
+                        label="批大小"
+                        value={dataset.batch_size ?? null}
+                        className="pt-2"
+                        onChange={value =>
+                          setJobConfig(value == null ? undefined : value, `config.process[0].datasets[${i}].batch_size`)
+                        }
+                        placeholder={`${jobConfig.config.process[0].train.batch_size}`}
+                        min={1}
+                        allowEmpty
+                      />
                     </div>
                     <div>
                       <TextInput
                         label="默认触发词"
                         value={dataset.default_caption}
                         onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].default_caption`)}
-                        placeholder="eg. A photo of a cat"
+                        placeholder="例如：一只猫的照片"
                       />
                       <NumberInput
                         label="全局打标丢弃率"
                         className="pt-2"
+                        docKey="datasets.caption_dropout_rate"
                         value={dataset.caption_dropout_rate}
                         onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].caption_dropout_rate`)}
                         placeholder="eg. 0.05"
                         min={0}
                         required
                       />
-                      {modelArch?.additionalSections?.includes('datasets.num_frames') && (
+                      <CreatableSelectInput
+                        label="标注扩展名"
+                        className="pt-2"
+                        value={dataset.caption_ext || 'txt'}
+                        onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].caption_ext`)}
+                        options={[
+                          { value: 'txt', label: 'txt' },
+                          { value: 'json', label: 'json' },
+                          { value: 'caption', label: 'caption' },
+                        ]}
+                      />
+
+                      {modelArch?.additionalSections?.includes('datasets.num_frames') && !dataset.auto_frame_count && (
                         <NumberInput
                           label="帧数"
                           className="pt-2"
                           docKey="datasets.num_frames"
                           value={dataset.num_frames}
                           onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].num_frames`)}
-                          placeholder="eg. 41"
+                          placeholder="输入提示词"
                           min={1}
                           required
                         />
@@ -913,6 +1299,14 @@ export default function SimpleJob({
                           checked={dataset.is_reg || false}
                           onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].is_reg`)}
                         />
+                        {modelArch?.additionalSections?.includes('datasets.auto_frame_count') && (
+                          <Checkbox
+                            label="自动帧数"
+                            checked={dataset.auto_frame_count || false}
+                            onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].auto_frame_count`)}
+                            docKey="datasets.auto_frame_count"
+                          />
+                        )}
                         {modelArch?.additionalSections?.includes('datasets.do_i2v') && (
                           <Checkbox
                             label="启用 I2V"
@@ -921,54 +1315,100 @@ export default function SimpleJob({
                             docKey="datasets.do_i2v"
                           />
                         )}
+                        {modelArch?.additionalSections?.includes('datasets.do_audio') && (
+                          <Checkbox
+                            label="LoKr 因子"
+                            checked={dataset.do_audio || false}
+                            onChange={value => {
+                              if (!value) {
+                                setJobConfig(undefined, `config.process[0].datasets[${i}].do_audio`);
+                              } else {
+                                setJobConfig(value, `config.process[0].datasets[${i}].do_audio`);
+                              }
+                            }}
+                            docKey="datasets.do_audio"
+                          />
+                        )}
+                        {modelArch?.additionalSections?.includes('datasets.audio_normalize') && (
+                          <Checkbox
+                            label="音频归一化"
+                            checked={dataset.audio_normalize || false}
+                            onChange={value => {
+                              if (!value) {
+                                setJobConfig(undefined, `config.process[0].datasets[${i}].audio_normalize`);
+                              } else {
+                                setJobConfig(value, `config.process[0].datasets[${i}].audio_normalize`);
+                              }
+                            }}
+                            docKey="datasets.audio_normalize"
+                          />
+                        )}
+                        {modelArch?.additionalSections?.includes('datasets.audio_preserve_pitch') && (
+                          <Checkbox
+                            label="保持音高"
+                            checked={dataset.audio_preserve_pitch || false}
+                            onChange={value => {
+                              if (!value) {
+                                setJobConfig(undefined, `config.process[0].datasets[${i}].audio_preserve_pitch`);
+                              } else {
+                                setJobConfig(value, `config.process[0].datasets[${i}].audio_preserve_pitch`);
+                              }
+                            }}
+                            docKey="datasets.audio_preserve_pitch"
+                          />
+                        )}
                       </FormGroup>
-                      <FormGroup label="翻转" docKey={'datasets.flip'} className="mt-2">
-                        <Checkbox
-                          label={
-                            <>
-                              水平翻转 <FlipHorizontal2 className="inline-block w-4 h-4 ml-1" />
-                            </>
-                          }
-                          checked={dataset.flip_x || false}
-                          onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].flip_x`)}
-                        />
-                        <Checkbox
-                          label={
-                            <>
-                              垂直翻转 <FlipVertical2 className="inline-block w-4 h-4 ml-1" />
-                            </>
-                          }
-                          checked={dataset.flip_y || false}
-                          onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].flip_y`)}
-                        />
-                      </FormGroup>
+                      {!isAudioModel && (
+                        <FormGroup label="翻转" docKey={'datasets.flip'} className="mt-2">
+                          <Checkbox
+                            label={
+                              <>
+                                Flip X <FlipHorizontal2 className="inline-block w-4 h-4 ml-1" />
+                              </>
+                            }
+                            checked={dataset.flip_x || false}
+                            onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].flip_x`)}
+                          />
+                          <Checkbox
+                            label={
+                              <>
+                                Flip Y <FlipVertical2 className="inline-block w-4 h-4 ml-1" />
+                              </>
+                            }
+                            checked={dataset.flip_y || false}
+                            onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].flip_y`)}
+                          />
+                        </FormGroup>
+                      )}
                     </div>
-                    <div>
-                      <FormGroup label="分辨率" className="pt-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          {[
-                            [256, 512, 768],
-                            [1024, 1280, 1536],
-                          ].map(resGroup => (
-                            <div key={resGroup[0]} className="space-y-2">
-                              {resGroup.map(res => (
-                                <Checkbox
-                                  key={res}
-                                  label={res.toString()}
-                                  checked={dataset.resolution.includes(res)}
-                                  onChange={value => {
-                                    const resolutions = dataset.resolution.includes(res)
-                                      ? dataset.resolution.filter(r => r !== res)
-                                      : [...dataset.resolution, res];
-                                    setJobConfig(resolutions, `config.process[0].datasets[${i}].resolution`);
-                                  }}
-                                />
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      </FormGroup>
-                    </div>
+                    {!isAudioModel && (
+                      <div>
+                        <FormGroup label="分辨率" className="pt-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              [256, 512, 768, 1024],
+                              [1280, 1328, 1536, 2048],
+                            ].map(resGroup => (
+                              <div key={resGroup[0]} className="space-y-2">
+                                {resGroup.map(res => (
+                                  <Checkbox
+                                    key={res}
+                                    label={res.toString()}
+                                    checked={dataset.resolution.includes(res)}
+                                    onChange={value => {
+                                      const resolutions = dataset.resolution.includes(res)
+                                        ? dataset.resolution.filter(r => r !== res)
+                                        : [...dataset.resolution, res];
+                                      setJobConfig(resolutions, `config.process[0].datasets[${i}].resolution`);
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        </FormGroup>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -989,14 +1429,8 @@ export default function SimpleJob({
           </Card>
         </div>
         <div>
-          <Card title="采样">
-            <div
-              className={
-                isVideoModel
-                  ? 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6'
-                  : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6'
-              }
-            >
+          <Card title="滑条">
+            <div className={sampleTopStyleClass}>
               <div>
                 <NumberInput
                   label="采样间隔(步)"
@@ -1004,6 +1438,15 @@ export default function SimpleJob({
                   onChange={value => setJobConfig(value, 'config.process[0].sample.sample_every')}
                   placeholder="eg. 250"
                   min={1}
+                  required
+                />
+                <NumberInput
+                  label="采样起始步"
+                  value={jobConfig.config.process[0].sample.sample_start_step ?? 0}
+                  onChange={value => setJobConfig(value, 'config.process[0].sample.sample_start_step')}
+                  placeholder="eg. 0"
+                  className="pt-2"
+                  min={0}
                   required
                 />
                 <SelectInput
@@ -1035,47 +1478,50 @@ export default function SimpleJob({
                   required
                 />
               </div>
-              <div>
-                <NumberInput
-                  label="宽度"
-                  value={jobConfig.config.process[0].sample.width}
-                  onChange={value => setJobConfig(value, 'config.process[0].sample.width')}
-                  placeholder="eg. 1024"
-                  min={0}
-                  required
-                />
-                <NumberInput
-                  label="高度"
-                  value={jobConfig.config.process[0].sample.height}
-                  onChange={value => setJobConfig(value, 'config.process[0].sample.height')}
-                  placeholder="eg. 1024"
-                  className="pt-2"
-                  min={0}
-                  required
-                />
-                {isVideoModel && (
-                  <div>
-                    <NumberInput
-                      label="帧数"
-                      value={jobConfig.config.process[0].sample.num_frames}
-                      onChange={value => setJobConfig(value, 'config.process[0].sample.num_frames')}
-                      placeholder="eg. 0"
-                      className="pt-2"
-                      min={0}
-                      required
-                    />
-                    <NumberInput
-                      label="帧率"
-                      value={jobConfig.config.process[0].sample.fps}
-                      onChange={value => setJobConfig(value, 'config.process[0].sample.fps')}
-                      placeholder="eg. 0"
-                      className="pt-2"
-                      min={0}
-                      required
-                    />
-                  </div>
-                )}
-              </div>
+
+              {!isAudioModel && (
+                <div>
+                  <NumberInput
+                    label="宽度"
+                    value={jobConfig.config.process[0].sample.width}
+                    onChange={value => setJobConfig(value, 'config.process[0].sample.width')}
+                    placeholder="eg. 1024"
+                    min={0}
+                    required
+                  />
+                  <NumberInput
+                    label="高度"
+                    value={jobConfig.config.process[0].sample.height}
+                    onChange={value => setJobConfig(value, 'config.process[0].sample.height')}
+                    placeholder="eg. 1024"
+                    className="pt-2"
+                    min={0}
+                    required
+                  />
+                  {isVideoModel && (
+                    <div>
+                      <NumberInput
+                        label="帧数"
+                        value={jobConfig.config.process[0].sample.num_frames}
+                        onChange={value => setJobConfig(value, 'config.process[0].sample.num_frames')}
+                        placeholder="eg. 0"
+                        className="pt-2"
+                        min={0}
+                        required
+                      />
+                      <NumberInput
+                        label="帧率"
+                        value={jobConfig.config.process[0].sample.fps}
+                        onChange={value => setJobConfig(value, 'config.process[0].sample.fps')}
+                        placeholder="eg. 0"
+                        className="pt-2"
+                        min={0}
+                        required
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <NumberInput
@@ -1094,7 +1540,7 @@ export default function SimpleJob({
                 />
               </div>
               <div>
-                <FormGroup label="高级采样" className="pt-2">
+                <FormGroup label="文本编码器优化" className="pt-2">
                   <div>
                     <Checkbox
                       label="跳过首次采样"
@@ -1141,77 +1587,203 @@ export default function SimpleJob({
                 </FormGroup>
               </div>
             </div>
-            <FormGroup label={`采样提示词 (${jobConfig.config.process[0].sample.samples.length})`} className="pt-2">
-              <div></div>
-            </FormGroup>
+            <div className="pt-2 mb-2 flex items-center justify-between">
+              <label className="block text-xs text-gray-300">
+                Sample Prompts ({jobConfig.config.process[0].sample.samples.length})
+              </label>
+              {modelArch?.additionalSections?.includes('ideogram_4_prompt') && (
+                <button
+                  type="button"
+                  disabled={jobConfig.config.process[0].sample.samples.length === 0}
+                  onClick={() => {
+                    const sampleCfg = jobConfig.config.process[0].sample;
+                    const items = sampleCfg.samples
+                      .map((s, i) => ({
+                        index: i,
+                        prompt: s.prompt || '',
+                        aspectRatio: toAspectRatio(s.width || sampleCfg.width, s.height || sampleCfg.height),
+                      }))
+                      .filter(it => it.prompt.trim() !== '');
+                    if (items.length === 0) return;
+                    openUpsamplePromptsModal(items, (index, newPrompt) => {
+                      setJobConfig(newPrompt, `config.process[0].sample.samples[${index}].prompt`);
+                    });
+                  }}
+                  className="px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-md inline-flex items-center gap-2"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  放大提示词
+                </button>
+              )}
+            </div>
             {jobConfig.config.process[0].sample.samples.map((sample, i) => (
               <div key={i} className="rounded-lg pl-4 pr-1 mb-4 bg-gray-950">
                 <div className="flex items-center space-x-2">
                   <div className="flex-1">
                     <div className="flex">
                       <div className="flex-1">
-                        <TextInput
-                          label={`提示词`}
-                          value={sample.prompt}
-                          onChange={value => setJobConfig(value, `config.process[0].sample.samples[${i}].prompt`)}
-                          placeholder="输入提示词"
-                          required
-                        />
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
-                          <TextInput
-                            label={`宽度`}
-                            value={sample.width ? `${sample.width}` : ''}
-                            onChange={value => {
-                              // remove any non-numeric characters
-                              value = value.replace(/\D/g, '');
-                              if (value === '') {
-                                // remove the key from the config if empty
-                                let newConfig = objectCopy(jobConfig);
-                                if (newConfig.config.process[0].sample.samples[i]) {
-                                  delete newConfig.config.process[0].sample.samples[i].width;
-                                  setJobConfig(
-                                    newConfig.config.process[0].sample.samples,
-                                    'config.process[0].sample.samples',
-                                  );
-                                }
-                              } else {
-                                const intValue = parseInt(value);
-                                if (!isNaN(intValue)) {
-                                  setJobConfig(intValue, `config.process[0].sample.samples[${i}].width`);
+                        {modelArch?.sampleTags && taggedSampleArr && modelArchTagSections ? (
+                          <>
+                            {modelArchTagSections.map((sampleTagSection, sti) => (
+                              <div key={sti} className="grid w-full lg:grid-flow-col lg:auto-cols-fr gap-4 mt-2">
+                                {Object.entries(sampleTagSection).map(([tagKey, tag]) => (
+                                  <div key={tagKey} className="mb-2">
+                                    {tag.type === 'text' && (
+                                      <TextInput
+                                        label={tag.title}
+                                        value={taggedSampleArr[i][tagKey] ?? ''}
+                                        onChange={value => {
+                                          let taggedSample = { ...taggedSampleArr[i] };
+                                          taggedSample[tagKey] = value;
+                                          setJobConfig(
+                                            objToTags(taggedSample),
+                                            `config.process[0].sample.samples[${i}].prompt`,
+                                          );
+                                        }}
+                                        placeholder={`Enter ${tag.title.toLowerCase()}`}
+                                      />
+                                    )}
+                                    {tag.type === 'multiline' && (
+                                      <TextAreaInput
+                                        label={tag.title}
+                                        value={taggedSampleArr[i][tagKey] ?? ''}
+                                        onChange={value => {
+                                          let taggedSample = { ...taggedSampleArr[i] };
+                                          taggedSample[tagKey] = value;
+                                          setJobConfig(
+                                            objToTags(taggedSample),
+                                            `config.process[0].sample.samples[${i}].prompt`,
+                                          );
+                                        }}
+                                        placeholder={`Enter ${tag.title.toLowerCase()}`}
+                                      />
+                                    )}
+                                    {tag.type === 'number' && (
+                                      <NumberInput
+                                        label={tag.title}
+                                        value={taggedSampleArr[i][tagKey] ?? ''}
+                                        onChange={value => {
+                                          let taggedSample = { ...taggedSampleArr[i] };
+                                          taggedSample[tagKey] = value;
+                                          setJobConfig(
+                                            objToTags(taggedSample),
+                                            `config.process[0].sample.samples[${i}].prompt`,
+                                          );
+                                        }}
+                                        placeholder={`Enter ${tag.title.toLowerCase()}`}
+                                      />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </>
+                        ) : (
+                          <>
+                            {modelArch?.hasMultiLinePrompts ? (
+                              <TextAreaInput
+                                label={`BPP 损失倍率`}
+                                value={sample.prompt}
+                                onChange={value => setJobConfig(value, `config.process[0].sample.samples[${i}].prompt`)}
+                                placeholder="输入提示词"
+                                required
+                              />
+                            ) : (
+                              <TextInput
+                                label={`BPP 损失倍率`}
+                                value={sample.prompt}
+                                onChange={value => setJobConfig(value, `config.process[0].sample.samples[${i}].prompt`)}
+                                placeholder="输入提示词"
+                                required
+                              />
+                            )}
+                          </>
+                        )}
+
+                        {modelArch?.additionalSections?.includes('ideogram_4_prompt') && (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const sampleCfg = jobConfig.config.process[0].sample;
+                                openPromptBoxEditor({
+                                  prompt: sample.prompt || '',
+                                  aspectRatio: toAspectRatio(
+                                    sample.width || sampleCfg.width,
+                                    sample.height || sampleCfg.height,
+                                  ),
+                                  title: `Prompt #${i + 1}`,
+                                  onApply: newPrompt =>
+                                    setJobConfig(newPrompt, `config.process[0].sample.samples[${i}].prompt`),
+                                });
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-gray-600 text-gray-300 hover:bg-gray-800 transition-colors"
+                            >
+                              <SquareDashed className="w-3.5 h-3.5" />
+                              Edit caption &amp; boxes
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="grid w-full lg:grid-flow-col lg:auto-cols-fr gap-4 mt-2">
+                          {!isAudioModel && (
+                            <TextInput
+                              label={`宽度`}
+                              value={sample.width ? `${sample.width}` : ''}
+                              onChange={value => {
+                                // remove any non-numeric characters
+                                value = value.replace(/\D/g, '');
+                                if (value === '') {
+                                  // remove the key from the config if empty
+                                  let newConfig = objectCopy(jobConfig);
+                                  if (newConfig.config.process[0].sample.samples[i]) {
+                                    delete newConfig.config.process[0].sample.samples[i].width;
+                                    setJobConfig(
+                                      newConfig.config.process[0].sample.samples,
+                                      'config.process[0].sample.samples',
+                                    );
+                                  }
                                 } else {
-                                  console.warn('Invalid width value:', value);
+                                  const intValue = parseInt(value);
+                                  if (!isNaN(intValue)) {
+                                    setJobConfig(intValue, `config.process[0].sample.samples[${i}].width`);
+                                  } else {
+                                    console.warn('Invalid width value:', value);
+                                  }
                                 }
-                              }
-                            }}
-                            placeholder={`${jobConfig.config.process[0].sample.width} (default)`}
-                          />
-                          <TextInput
-                            label={`高度`}
-                            value={sample.height ? `${sample.height}` : ''}
-                            onChange={value => {
-                              // remove any non-numeric characters
-                              value = value.replace(/\D/g, '');
-                              if (value === '') {
-                                // remove the key from the config if empty
-                                let newConfig = objectCopy(jobConfig);
-                                if (newConfig.config.process[0].sample.samples[i]) {
-                                  delete newConfig.config.process[0].sample.samples[i].height;
-                                  setJobConfig(
-                                    newConfig.config.process[0].sample.samples,
-                                    'config.process[0].sample.samples',
-                                  );
-                                }
-                              } else {
-                                const intValue = parseInt(value);
-                                if (!isNaN(intValue)) {
-                                  setJobConfig(intValue, `config.process[0].sample.samples[${i}].height`);
+                              }}
+                              placeholder={`${jobConfig.config.process[0].sample.width} (default)`}
+                            />
+                          )}
+                          {!isAudioModel && (
+                            <TextInput
+                              label={`高度`}
+                              value={sample.height ? `${sample.height}` : ''}
+                              onChange={value => {
+                                // remove any non-numeric characters
+                                value = value.replace(/\D/g, '');
+                                if (value === '') {
+                                  // remove the key from the config if empty
+                                  let newConfig = objectCopy(jobConfig);
+                                  if (newConfig.config.process[0].sample.samples[i]) {
+                                    delete newConfig.config.process[0].sample.samples[i].height;
+                                    setJobConfig(
+                                      newConfig.config.process[0].sample.samples,
+                                      'config.process[0].sample.samples',
+                                    );
+                                  }
                                 } else {
-                                  console.warn('Invalid height value:', value);
+                                  const intValue = parseInt(value);
+                                  if (!isNaN(intValue)) {
+                                    setJobConfig(intValue, `config.process[0].sample.samples[${i}].height`);
+                                  } else {
+                                    console.warn('Invalid height value:', value);
+                                  }
                                 }
-                              }
-                            }}
-                            placeholder={`${jobConfig.config.process[0].sample.height} (default)`}
-                          />
+                              }}
+                              placeholder={`${jobConfig.config.process[0].sample.height} (default)`}
+                            />
+                          )}
                           <TextInput
                             label={`随机种子`}
                             value={sample.seed ? `${sample.seed}` : ''}
@@ -1240,7 +1812,7 @@ export default function SimpleJob({
                             placeholder={`${jobConfig.config.process[0].sample.walk_seed ? jobConfig.config.process[0].sample.seed + i : jobConfig.config.process[0].sample.seed} (default)`}
                           />
                           <TextInput
-                            label={`LoRA 强度`}
+                            label={`LoRA 缩放`}
                             value={sample.network_multiplier ? `${sample.network_multiplier}` : ''}
                             onChange={value => {
                               // remove any non-numeric, - or . characters
@@ -1271,7 +1843,7 @@ export default function SimpleJob({
                             {['ctrl_img_1', 'ctrl_img_2', 'ctrl_img_3'].map((ctrlKey, ctrl_idx) => (
                               <SampleControlImage
                                 key={ctrlKey}
-                                instruction={`添加控制图 ${ctrl_idx + 1}`}
+                                instruction={`Add Control Image ${ctrl_idx + 1}`}
                                 className=""
                                 src={sample[ctrlKey as keyof typeof sample] as string}
                                 onNewImageSelected={imagePath => {
@@ -1338,8 +1910,8 @@ export default function SimpleJob({
           </Card>
         </div>
 
-        {status === 'success' && <p className="text-green-500 text-center">Training saved successfully!</p>}
-        {status === 'error' && <p className="text-red-500 text-center">Error saving training. Please try again.</p>}
+        {status === 'success' && <p className="text-green-500 text-center">训练配置保存成功！</p>}
+        {status === 'error' && <p className="text-red-500 text-center">保存训练配置失败，请重试。</p>}
       </form>
       <AddSingleImageModal />
     </>

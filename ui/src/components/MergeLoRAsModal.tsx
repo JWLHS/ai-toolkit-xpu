@@ -114,7 +114,7 @@ const MergeLoRAsModal: React.FC = () => {
       }
     } catch (err: any) {
       setHasError(true);
-      append(`\n${err?.message || 'Unknown error'}\n`);
+      append(`\n${err?.message || '未知错误'}\n`);
     } finally {
       setIsRunning(false);
       setIsDone(true);
@@ -155,7 +155,7 @@ const MergeLoRAsModal: React.FC = () => {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Merge LoRAs"
+      title="合并 LoRA"
       size="lg"
       showCloseButton={!isRunning}
       closeOnOverlayClick={!isRunning}
@@ -163,8 +163,8 @@ const MergeLoRAsModal: React.FC = () => {
       {showLog ? (
         <div>
           <div className="mb-2 text-sm">
-            {isRunning && <span className="text-amber-400">Merging LoRAs... please do not close this window.</span>}
-            {isDone && hasError && <span className="text-rose-400">Merge failed. See log below.</span>}
+            {isRunning && <span className="text-amber-400">正在合并 LoRA……请不要关闭窗口。</span>}
+            {isDone && hasError && <span className="text-rose-400">合并失败，见下方日志。</span>}
             {isDone && !hasError && <span className="text-emerald-400">Merge complete.</span>}
           </div>
           <div
@@ -180,7 +180,7 @@ const MergeLoRAsModal: React.FC = () => {
               disabled={isRunning}
               className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-gray-100 rounded-md"
             >
-              Close
+              关闭
             </button>
           </div>
         </div>
@@ -192,7 +192,7 @@ const MergeLoRAsModal: React.FC = () => {
           }}
         >
           <TextInput
-            label="Output Filename"
+            label="输出文件名"
             value={modalInfo?.outputName || ''}
             suffix=".safetensors"
             onChange={value => {
@@ -201,12 +201,12 @@ const MergeLoRAsModal: React.FC = () => {
                 outputName: value,
               } as MergeLoRAsModalState);
             }}
-            placeholder="Enter output filename"
+            placeholder="输入输出文件名"
           />
 
           <div className="mt-4">
             <SelectInput
-              label="Add LoRA"
+              label="添加 LoRA"
               multiple={false}
               value=""
               onChange={value => addLoRA(value)}
@@ -216,7 +216,7 @@ const MergeLoRAsModal: React.FC = () => {
 
           {selectedLoRAs.length > 0 && (
             <div className="mt-4">
-              <label className="block text-xs mb-1 text-gray-300">Selected LoRAs</label>
+              <label className="block text-xs mb-1 text-gray-300">已选 LoRA</label>
               <div className="bg-purple-500/10 rounded-xl p-2 max-h-48 overflow-y-auto space-y-1">
                 {selectedLoRAs.map(s => (
                   <div key={s.path} className="flex items-center gap-2 px-2 py-0.5">
@@ -258,14 +258,14 @@ const MergeLoRAsModal: React.FC = () => {
               onClick={onClose}
               className="px-4 py-2 text-sm text-gray-300 hover:text-gray-100 rounded-md"
             >
-              Cancel
+              取消
             </button>
             <button
               type="submit"
               disabled={selectedLoRAs.length === 0 || !modalInfo?.outputName}
               className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-md"
             >
-              Merge
+              合并
             </button>
           </div>
         </form>

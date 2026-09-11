@@ -33,7 +33,9 @@ def attention(q: Tensor, k: Tensor, v: Tensor, pe: Tensor, mask: Tensor) -> Tens
 
 def rope(pos: Tensor, dim: int, theta: int) -> Tensor:
     assert dim % 2 == 0
-    scale = torch.arange(0, dim, 2, dtype=torch.float64, device=pos.device) / dim
+    # XPU/MPS have no fp64 → use fp32 there (toolkit.device_utils.rope_dtype)
+    from toolkit.device_utils import rope_dtype
+    scale = torch.arange(0, dim, 2, dtype=rope_dtype(pos.device), device=pos.device) / dim
     omega = 1.0 / (theta**scale)
     out = torch.einsum("...n,d->...nd", pos, omega)
     out = torch.stack(

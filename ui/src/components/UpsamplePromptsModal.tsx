@@ -185,7 +185,7 @@ const UpsamplePromptsModal: React.FC = () => {
       }
     } catch (err: any) {
       setHasError(true);
-      append(`\n${err?.message || 'Unknown error'}\n`);
+      append(`\n${err?.message || '未知错误'}\n`);
     } finally {
       // Anything still queued/running never reported a result -> failed.
       setStatus(prev => {
@@ -212,7 +212,7 @@ const UpsamplePromptsModal: React.FC = () => {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Upsample Prompts"
+      title="放大提示词"
       size="lg"
       showCloseButton={!isRunning}
       closeOnOverlayClick={!isRunning}
@@ -244,7 +244,7 @@ const UpsamplePromptsModal: React.FC = () => {
               </button>
               <span className="text-gray-600">|</span>
               <button type="button" onClick={() => setAll(false)} className="text-xs text-gray-300 hover:text-gray-100">
-                None
+                无
               </button>
             </div>
           )}
@@ -341,7 +341,7 @@ const UpsamplePromptsModal: React.FC = () => {
             disabled={isRunning}
             className="px-4 py-2 text-sm text-gray-300 hover:text-gray-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-md"
           >
-            {isDone ? 'Close' : 'Cancel'}
+            {isDone ? '关闭' : '取消'}
           </button>
           {!isDone && (
             <button
@@ -350,7 +350,7 @@ const UpsamplePromptsModal: React.FC = () => {
               disabled={isRunning || selectedCount === 0}
               className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-md"
             >
-              {isRunning ? 'Upsampling...' : `Upsample (${selectedCount})`}
+              {isRunning ? '放大中…' : `Upsample (${selectedCount})`}
             </button>
           )}
         </div>

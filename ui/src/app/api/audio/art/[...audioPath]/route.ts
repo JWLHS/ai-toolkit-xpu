@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { getDatasetsRoot, getTrainingFolder, getDataRoot } from '@/server/settings';
+import { catchAllToFilePath } from '@/server/catchAllPath';
 
 /**
  * Serves embedded album art from an MP3 file's ID3v2 tag.
@@ -125,10 +126,12 @@ function extractArtFromTag(buf: Buffer): ArtResult {
   return null;
 }
 
-export async function GET(request: NextRequest, { params }: { params: { audioPath: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { audioPath: string | string[] } }) {
   const { audioPath } = await params;
   try {
-    const filepath = decodeURIComponent(audioPath);
+    // Segments are already URL-decoded by Next.js; accepts both the legacy
+    // single-segment form and the `<folder>/<filename>` form.
+    const filepath = catchAllToFilePath(audioPath);
 
     // Security check
     const datasetRoot = await getDatasetsRoot();
@@ -140,12 +143,12 @@ export async function GET(request: NextRequest, { params }: { params: { audioPat
     const resolved = path.resolve(filepath);
     const isAllowed = allowedDirs.some(d => resolved === d || resolved.startsWith(d + path.sep));
     if (!isAllowed) {
-      return new NextResponse('Access denied', { status: 403 });
+      return new NextResponse('拒绝访问', { status: 403 });
     }
 
     const stat = await fs.promises.stat(resolved).catch(() => null);
     if (!stat || !stat.isFile()) {
-      return new NextResponse('File not found', { status: 404 });
+      return new NextResponse('文件不存在', { status: 404 });
     }
 
     // Read only the ID3 tag (first min(tagSize, 4MB) bytes).
@@ -182,6 +185,6 @@ export async function GET(request: NextRequest, { params }: { params: { audioPat
     }
   } catch (error) {
     console.error('Error extracting album art:', error);
-    return new NextResponse('Internal Server Error', { status: 500 });
+    return new NextResponse('服务器内部错误', { status: 500 });
   }
 }

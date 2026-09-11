@@ -207,7 +207,8 @@ class MiniMaxH3Pipeline:
         # shift remap so both streams sit at the same underlying position
         sigmas_a = remap_sigma(sigmas_v, VIDEO_SIGMA_SHIFT, AUDIO_SIGMA_SHIFT)
 
-        position_ids = layout.position_ids[None].to(device)
+        # CPU 上 float64 构建，XPU/MPS 无 fp64 → 搬运时降 float32
+        position_ids = layout.position_ids[None].to(device=device, dtype=torch.float32)
         tags = layout.token_tags[None].to(device)
         video_indices = layout.video_indices.to(device)
         audio_indices = layout.audio_indices.to(device)

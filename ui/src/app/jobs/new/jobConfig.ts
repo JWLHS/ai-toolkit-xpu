@@ -1,4 +1,7 @@
-import { JobConfig, DatasetConfig, SliderConfig } from '@/types';
+'use client';
+import { isMac } from '@/helpers/basic';
+import { defaultSampleConfig } from '@/helpers/defaultSamples';
+import { JobConfig, SampleConfig, DatasetConfig, SliderConfig } from '@/types';
 
 export const defaultDatasetConfig: DatasetConfig = {
   folder_path: '/path/to/images/folder',
@@ -14,9 +17,9 @@ export const defaultDatasetConfig: DatasetConfig = {
   controls: [],
   shrink_video_to_frames: true,
   num_frames: 1,
-  do_i2v: true,
   flip_x: false,
   flip_y: false,
+  num_repeats: 1,
 };
 
 export const defaultSliderConfig: SliderConfig = {
@@ -28,6 +31,10 @@ export const defaultSliderConfig: SliderConfig = {
   anchor_class: '',
 };
 
+export const defaultCompileOptions = {
+  block_compile: true,
+};
+
 export const defaultJobConfig: JobConfig = {
   job: 'extension',
   config: {
@@ -37,7 +44,7 @@ export const defaultJobConfig: JobConfig = {
         type: 'diffusion_trainer',
         training_folder: 'output',
         sqlite_db_path: './aitk_db.db',
-        device: 'xpu',
+        device: 'cuda',
         trigger_word: null,
         performance_log_every: 10,
         network: {
@@ -69,7 +76,7 @@ export const defaultJobConfig: JobConfig = {
           train_text_encoder: false,
           gradient_checkpointing: true,
           noise_scheduler: 'flowmatch',
-          optimizer: 'adamw',
+          optimizer: 'adamw8bit',
           timestep_type: 'sigmoid',
           content_or_style: 'balanced',
           optimizer_params: {
@@ -98,62 +105,16 @@ export const defaultJobConfig: JobConfig = {
         },
         model: {
           name_or_path: 'ostris/Flex.1-alpha',
-          quantize: false,
+          quantize: true,
           qtype: 'qfloat8',
-          quantize_te: false,
+          quantize_te: true,
           qtype_te: 'qfloat8',
           arch: 'flex1',
           low_vram: false,
           model_kwargs: {},
+          compile: false,
         },
-        sample: {
-          sampler: 'flowmatch',
-          sample_every: 250,
-          width: 1024,
-          height: 1024,
-          samples: [
-            {
-              prompt: 'woman with red hair, playing chess at the park, bomb going off in the background',
-            },
-            {
-              prompt: 'a woman holding a coffee cup, in a beanie, sitting at a cafe',
-            },
-            {
-              prompt: 'a horse is a DJ at a night club, fish eye lens, smoke machine, lazer lights, holding a martini',
-            },
-            {
-              prompt:
-                'a man showing off his cool new t shirt at the beach, a shark is jumping out of the water in the background',
-            },
-            {
-              prompt: 'a bear building a log cabin in the snow covered mountains',
-            },
-            {
-              prompt: 'woman playing the guitar, on stage, singing a song, laser lights, punk rocker',
-            },
-            {
-              prompt: 'hipster man with a beard, building a chair, in a wood shop',
-            },
-            {
-              prompt:
-                'photo of a man, white background, medium shot, modeling clothing, studio lighting, white backdrop',
-            },
-            {
-              prompt: "a man holding a sign that says, 'this is a sign'",
-            },
-            {
-              prompt:
-                'a bulldog, in a post apocalyptic world, with a shotgun, in a leather jacket, in a desert, with a motorcycle',
-            },
-          ],
-          neg: '',
-          seed: 42,
-          walk_seed: true,
-          guidance_scale: 4,
-          sample_steps: 25,
-          num_frames: 1,
-          fps: 1,
-        },
+        sample: defaultSampleConfig,
       },
     ],
   },
@@ -191,6 +152,7 @@ export const migrateJobConfig = (jobConfig: JobConfig): JobConfig => {
       false) as boolean;
     delete jobConfig.config.process[0].model.auto_memory;
   }
+
   if (!('logging' in jobConfig.config.process[0])) {
     //@ts-ignore
     jobConfig.config.process[0].logging = {
@@ -198,5 +160,9 @@ export const migrateJobConfig = (jobConfig: JobConfig): JobConfig => {
       use_ui_logger: true,
     };
   }
+  if (isMac()) {
+    jobConfig.config.process[0].device = 'mps';
+  }
+
   return jobConfig;
 };

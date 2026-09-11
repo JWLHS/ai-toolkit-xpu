@@ -45,8 +45,9 @@ class WanAttnProcessor2_0:
         if rotary_emb is not None:
 
             def apply_rotary_emb(hidden_states: torch.Tensor, freqs: torch.Tensor):
+                from toolkit.device_utils import rope_dtype
                 x_rotated = torch.view_as_complex(
-                    hidden_states.to(torch.float64).unflatten(3, (-1, 2)))
+                    hidden_states.to(rope_dtype(hidden_states.device)).unflatten(3, (-1, 2)))
                 x_out = torch.view_as_real(x_rotated * freqs).flatten(3, 4)
                 return x_out.type_as(hidden_states)
 

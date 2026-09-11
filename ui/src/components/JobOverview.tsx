@@ -14,12 +14,17 @@ interface JobOverviewProps {
 }
 
 export default function JobOverview({ job }: JobOverviewProps) {
-  const gpuIds = useMemo(() => job.gpu_ids.split(',').map(id => parseInt(id)), [job.gpu_ids]);
-  const { log, setLog, status: statusLog, refresh: refreshLog } = useJobLog(job.id, 2000);
+  const gpuIds = useMemo(() => {
+    if (job.gpu_ids === 'mps') {
+      return [0]; // For MPS, we can just return a single GPU ID since it's virtualized
+    }
+    return job.gpu_ids.split(',').map(id => parseInt(id));
+  }, [job.gpu_ids]);
+  const { log, status: statusLog, refresh: refreshLog } = useJobLog(job.id, 2000);
   const logRef = useRef<HTMLDivElement>(null);
   // Track whether we should auto-scroll to bottom
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
-
+  console.log('job.gpu_ids', job.gpu_ids);
   const { gpuList, isGPUInfoLoaded } = useGPUInfo(gpuIds, 5000);
   const { cpuInfo, isCPUInfoLoaded } = useCPUInfo(5000);
   const totalSteps = getTotalSteps(job);
@@ -27,12 +32,8 @@ export default function JobOverview({ job }: JobOverviewProps) {
   const isStopping = job.stop && job.status === 'running';
 
   const logLines: string[] = useMemo(() => {
-    // split at line breaks on \n or \r\n but not \r
-    let splits: string[] = log.split(/\n|\r\n/);
-
-    splits = splits.map(line => {
-      return line.split(/\r/).pop();
-    }) as string[];
+    // Log is already terminal-rendered by useJobLog — one entry per line.
+    let splits: string[] = log.split('\n');
 
     // only return last 100 lines max
     const maxLines = 1000;
@@ -77,72 +78,76 @@ export default function JobOverview({ job }: JobOverviewProps) {
     }
   };
 
+  const jobType = job?.job_type || 'unknown';
+
   let status = job.status;
   if (isStopping) {
     status = 'stopping';
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 md:gap-6 md:grid-cols-3">
       {/* Job Information Panel */}
-      <div className="col-span-2 bg-gray-900 rounded-xl shadow-lg overflow-hidden border border-gray-800 flex flex-col">
+      <div className="md:col-span-2 bg-gray-900 rounded-xl shadow-lg overflow-hidden border border-gray-800 flex flex-col">
         <div className="bg-gray-800 px-4 py-3 flex items-center justify-between">
           <h2 className="text-gray-100">
-            <Info className="w-5 h-5 mr-2 -mt-1 text-amber-400 inline-block" /> {job.info}
+            <Info className="w-5 h-5 mr-2 -mt-1 text-amber-600 dark:text-amber-400 inline-block" /> {job.info}
           </h2>
           <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(job.status)}`}>{job.status}</span>
         </div>
 
         <div className="p-4 space-y-6 flex flex-col flex-grow">
           {/* Progress Bar */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">Progress</span>
-              <span className="text-gray-200">
-                Step {job.step} of {totalSteps}
-              </span>
+          {totalSteps > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">进度</span>
+                <span className="text-gray-200">
+                  Step {job.step} of {totalSteps}
+                </span>
+              </div>
+              <div className="w-full bg-gray-800 rounded-full h-2">
+                <div className="h-2 rounded-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} />
+              </div>
             </div>
-            <div className="w-full bg-gray-800 rounded-full h-2">
-              <div className="h-2 rounded-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
+          )}
 
           {/* Job Info Grid */}
           <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
             <div className="flex items-center space-x-4">
-              <HardDrive className="w-5 h-5 text-blue-400" />
+              <HardDrive className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               <div>
-                <p className="text-xs text-gray-400">Job Name</p>
+                <p className="text-xs text-gray-400">任务名称</p>
                 <p className="text-sm font-medium text-gray-200">{job.name}</p>
               </div>
             </div>
 
             <div className="flex items-center space-x-4">
-              <Cpu className="w-5 h-5 text-purple-400" />
+              <Cpu className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               <div>
-                <p className="text-xs text-gray-400">Assigned GPUs</p>
+                <p className="text-xs text-gray-400">分配的显卡</p>
                 <p className="text-sm font-medium text-gray-200">GPUs: {job.gpu_ids}</p>
               </div>
             </div>
 
             <div className="flex items-center space-x-4">
-              <Gauge className="w-5 h-5 text-green-400" />
+              <Gauge className="w-5 h-5 text-green-600 dark:text-green-400" />
               <div>
-                <p className="text-xs text-gray-400">Speed</p>
+                <p className="text-xs text-gray-400">速度</p>
                 <p className="text-sm font-medium text-gray-200">{job.speed_string == '' ? '?' : job.speed_string}</p>
               </div>
             </div>
           </div>
 
-  {/* 日志区域：在手机端使用视口高度，确保显示比例合适 */}
-  <div className="bg-gray-950 rounded-lg p-4 relative flex-grow min-h-60 h-[40vh] sm:h-[45vh] md:h-auto">
-    <div
-      ref={logRef}
-      className="text-xs text-gray-300 absolute inset-0 p-4 overflow-y-auto"
-      onScroll={handleScroll}
-    >
-              {statusLog === 'loading' && 'Loading log...'}
-              {statusLog === 'error' && 'Error loading log'}
+          {/* Log - Now using flex-grow to fill remaining space */}
+          <div className="bg-gray-950 rounded-lg p-4 relative flex-grow min-h-60">
+            <div
+              ref={logRef}
+              className="text-xs text-gray-300 absolute inset-0 p-4 overflow-y-auto"
+              onScroll={handleScroll}
+            >
+              {statusLog === 'loading' && '正在加载日志…'}
+              {statusLog === 'error' && '加载日志出错'}
               {['success', 'refreshing'].includes(statusLog) && (
                 <div>
                   {logLines.map((line, index) => {
@@ -156,12 +161,14 @@ export default function JobOverview({ job }: JobOverviewProps) {
       </div>
 
       {/* GPU Widget Panel */}
-      <div className="col-span-1">
+      <div className="md:col-span-1">
         <div>{isCPUInfoLoaded && cpuInfo && <CPUWidget cpu={cpuInfo} />}</div>
         <div className="mt-4">{isGPUInfoLoaded && gpuList.length > 0 && <GPUWidget gpu={gpuList[0]} />}</div>
-        <div className="mt-4">
-          <FilesWidget jobID={job.id} />
-        </div>
+        {jobType === 'train' && (
+          <div className="mt-4">
+            <FilesWidget jobID={job.id} jobName={job.name} />
+          </div>
+        )}
       </div>
     </div>
   );

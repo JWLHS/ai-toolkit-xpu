@@ -1090,7 +1090,9 @@ class MinimaxH3Model(BaseModel):
             encoder_hidden_states=text_batch,
             row_timesteps=row_t.to(device),
             token_tags=token_tags.to(device),
-            position_ids=position_ids.to(device),
+            # 位置网格在 CPU 上以 float64 构建（保证网格精度），但 XPU/MPS 没有 fp64，
+            # 搬运时直接降为 float32（rope 内部本来就会 .to(torch.float32)）
+            position_ids=position_ids.to(device=device, dtype=torch.float32),
             video_indices=video_indices.to(device),
             audio_indices=audio_indices.to(device),
             text_indices=text_indices.to(device),

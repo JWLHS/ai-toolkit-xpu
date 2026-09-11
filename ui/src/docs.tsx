@@ -7,7 +7,7 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '训练名称',
     description: (
       <>
-        训练任务的名称。用于标识任务并作为最终模型文件名的一部分。必须唯一，仅允许字母、数字、下划线和短横线，不允许空格或特殊字符。
+        训练任务的名称。系统用它来标识任务，也是最终模型的文件名。名称必须唯一，只能包含字母、数字、下划线和短横线，不能有空格或特殊字符。
       </>
     ),
   },
@@ -15,7 +15,7 @@ const docs: { [key: string]: ConfigDoc } = {
     title: 'GPU 编号',
     description: (
       <>
-        训练所使用的 GPU 编号。目前 UI 每个任务仅支持选择一个 GPU，但可以并行启动多个任务分别使用不同的 GPU。
+        用于训练的显卡。目前 UI 里一个任务只能选一张显卡，但可以同时启动多个任务，各自使用不同的显卡。
       </>
     ),
   },
@@ -23,15 +23,13 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '触发词',
     description: (
       <>
-        可选：用于触发你训练概念或角色的词或标记。
+        可选。这是用来触发你的概念或角色的词（触发词）。
         <br />
         <br />
-        当启用触发词时，如果数据集字幕未包含触发词，系统会自动在字幕开头加入触发词；若无字幕，将仅使用触发词作为字幕。若希望在不同位置使用触发词，可在字幕中使用占位符{' '}
-        <code>{'[trigger]'}</code>，系统会自动替换为你的触发词。
+        设置了触发词后：如果标注里没有它，会自动加在标注开头；如果完全没有标注，标注就只剩触发词。想让触发词出现在标注的不同位置，可以在标注里写 [trigger] 占位符，训练时会被替换成你的触发词。
         <br />
         <br />
-        触发词不会自动加到测试提示词中，请手动添加或同样使用{' '}
-        <code>{'[trigger]'}</code> 作为占位符。
+        触发词不会自动加到测试提示词里，你需要手动添加，或在测试提示词里同样使用 [trigger] 占位符。
       </>
     ),
   },
@@ -39,143 +37,7 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '名称或路径',
     description: (
       <>
-        HuggingFace 上 diffusers 仓库名，或本地基础模型的文件夹路径。多数模型需要使用 diffusers 格式的文件夹；部分模型（如 SDXL、SD1）可填入整合的 safetensors 检查点路径。
-      </>
-    ),
-  },
-  'config.process[0].model.arch': {
-    title: '模型架构',
-    description: (
-      <>
-        选择训练所用的基础模型架构，会影响可配置项与训练流程。例如图像、视频、编辑模型的架构不同。
-      </>
-    ),
-  },
-  'model.low_vram': {
-    title: '低显存',
-    description: (
-      <>
-        启用后以更保守的显存占用进行训练，适合显存较小的显卡。可能降低训练速度但提高稳定性。
-      </>
-    ),
-  },
-  'model.layer_offloading_transformer_percent': {
-    title: 'Transformer 卸载百分比',
-    description: (
-      <>
-        设置将 Transformer 层权重卸载到 CPU 内存的比例（0–100%）。卸载越多显存占用越少，但训练速度可能下降。
-      </>
-    ),
-  },
-  'model.layer_offloading_text_encoder_percent': {
-    title: '文本编码器卸载百分比',
-    description: (
-      <>
-        设置将文本编码器权重卸载到 CPU 内存的比例（0–100%）。用于进一步降低显存占用。
-      </>
-    ),
-  },
-  'config.process[0].network.type': {
-    title: '目标类型',
-    description: (
-      <>
-        训练目标网络类型，常见为 LoRA 或 LoKr。不同类型会影响参数含义与导出格式。
-      </>
-    ),
-  },
-  'config.process[0].network.lokr_factor': {
-    title: 'LoKr 因子',
-    description: (
-      <>
-        LoKr 的因子设置，影响参数分解与容量。-1 表示自动选择。
-      </>
-    ),
-  },
-  'config.process[0].network.linear': {
-    title: '线性秩',
-    description: (
-      <>
-        LoRA 的线性层秩（rank），数值越大容量越高但显存与训练难度也增加。
-      </>
-    ),
-  },
-  'config.process[0].network.conv': {
-    title: '卷积秩',
-    description: (
-      <>
-        卷积分支的秩，控制卷积通道的低秩近似容量。可选项，按需调整。
-      </>
-    ),
-  },
-  'train.batch_size': {
-    title: '批大小',
-    description: (
-      <>
-        每步训练的样本数量。受显存影响，过大可能 OOM，过小训练不稳定。
-      </>
-    ),
-  },
-  'train.gradient_accumulation': {
-    title: '梯度累计',
-    description: (
-      <>
-        累计多次小批次的梯度再进行一次优化，相当于放大有效批大小以节省显存。
-      </>
-    ),
-  },
-  'train.steps': {
-    title: '总步数',
-    description: (
-      <>
-        总训练迭代步数。步数越多通常效果更好，但训练时间更长。
-      </>
-    ),
-  },
-  'train.optimizer': {
-    title: '优化器',
-    description: (
-      <>
-        选择参数更新算法，如 AdamW8Bit 或 Adafactor。不同优化器对显存与稳定性影响不同。
-      </>
-    ),
-  },
-  'train.lr': {
-    title: '学习率',
-    description: (
-      <>
-        控制参数更新的步幅。过大易发散，过小收敛慢。建议从 1e-4 等常用值起调。
-      </>
-    ),
-  },
-  'train.optimizer_params.weight_decay': {
-    title: '权重衰减',
-    description: (
-      <>
-        L2 正则项系数，抑制过拟合并提升泛化能力。通常与优化器搭配调整。
-      </>
-    ),
-  },
-  'train.timestep_type': {
-    title: '时间步类型',
-    description: (
-      <>
-        噪声时间步分布类型（Sigmoid/Linear/Shift/Weighted），影响训练采样策略与学习重点。
-      </>
-    ),
-  },
-  'train.content_or_style': {
-    title: '时间步偏向',
-    description: (
-      <>
-        训练偏向形体、结构（高噪声）或细节、纹理（低噪声），Balanced 表示均衡。
-      </>
-    ),
-  },
-  'train.loss_type': {
-    title: '损失类型',
-    description: (
-      <>
-        选择损失函数（MSE/MAE/Wavelet/Stepped Recovery），影响训练优化目标与收敛特性。
+        HuggingFace 上 diffusers 仓库的名字，或本地底模的路径。大多数模型需要 diffusers 格式的文件夹；SDXL、SD1 这类模型也可以直接填整合版 safetensors 的路径。
       </>
     ),
   },
@@ -183,8 +45,7 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '控制数据集',
     description: (
       <>
-        控制数据集的文件名需要与训练数据集一一对应，形成成对文件。训练时这些图像作为控制/输入图像使用，
-        控制图会自动缩放以匹配目标训练图像的尺寸。
+        控制数据集里的文件名要与训练数据集一一对应，成对使用。这些图会作为控制图/输入图参与训练，并被缩放到与训练图相同的尺寸。
       </>
     ),
   },
@@ -192,11 +53,10 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '多控制数据集',
     description: (
       <>
-        控制数据集的文件名需与训练数据集对应为成对文件，训练时作为控制/输入图像。
+        控制数据集里的文件名要与训练数据集一一对应，成对使用。
         <br />
         <br />
-        多控制数据集会按列出的顺序依次应用所有控制图。如果模型不要求与目标图像保持相同长宽比（例如 Qwen/QIE-2509），
-        则控制图不必与目标图像尺寸或比例一致，系统会自动缩放到更适合该模型/目标的分辨率。
+        多个控制数据集会按列表顺序依次生效。如果模型不要求控制图与目标图同分辨率（例如 Qwen/Qwen-Image-Edit-2509），控制图不必匹配目标图的尺寸或长宽比，会自动缩放到模型/目标图最合适的分辨率。
       </>
     ),
   },
@@ -204,15 +64,13 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '帧数',
     description: (
       <>
-        用于视频数据集：将每个视频压缩/抽取为固定帧数。如果是图像数据集请设为 1。纯视频数据集会按时间均匀抽帧。
+        视频数据集缩放后的帧数。如果数据集是图片，填 1（一帧）。如果数据集全是视频，会从每个视频中等间隔抽帧。
         <br />
         <br />
-        建议在训练前将视频剪裁到合适长度。以 Wan 为例，默认 16fps，81 帧约等于 5 秒视频，
-        因此将视频统一到约 5 秒更利于训练稳定。
+        建议训练前先把视频裁成合适的长度。Wan 是每秒 16 帧，81 帧约等于 5 秒，所以最好把素材都裁到 5 秒左右。
         <br />
         <br />
-        示例：若设为 81，且数据集中两个视频分别为 2 秒与 90 秒，都会被均匀抽取为 81 帧，
-        因此 2 秒视频看起来更慢，90 秒视频看起来更快。
+        例如：设为 81，数据集里有两个视频（2 秒和 90 秒），两者都会抽出 81 帧，结果 2 秒的看起来变慢、90 秒的看起来飞快。
       </>
     ),
   },
@@ -220,8 +78,31 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '启用 I2V',
     description: (
       <>
-        对同时支持 I2V（图到视频）与 T2V（文到视频）的模型，此选项将该数据集按 I2V 方式训练：
-        会从视频中提取第一帧作为起始图像。未启用时，默认按 T2V 方式处理。
+        对同时支持 I2V（图生视频）和 T2V（文生视频）的视频模型，这个选项会让该数据集按 I2V 训练：从视频里取第一帧作为起始图。不勾选则按 T2V 处理。
+      </>
+    ),
+  },
+  'datasets.do_audio': {
+    title: '处理音频',
+    description: (
+      <>
+        对支持音视频的模型，会从视频里读出音频并调整到与视频序列匹配。由于视频会被缩放，音频的音高可能被拉高或压低。训练前请把素材裁成正确的长度。
+      </>
+    ),
+  },
+  'datasets.audio_normalize': {
+    title: '音频归一化',
+    description: (
+      <>
+        加载音频时把音量归一化到峰值最大值。适合素材音量大小不一致的情况。注意：如果你的片段里有需要保留的纯静音，不要开启，它会把静音片段也放大。
+      </>
+    ),
+  },
+  'datasets.audio_preserve_pitch': {
+    title: '保持音高',
+    description: (
+      <>
+        当音频长度与训练目标帧数不一致时，这个选项会保持音高不变。建议素材本身就与目标长度一致，因为拉伸音频可能引入失真。
       </>
     ),
   },
@@ -229,11 +110,10 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '水平/垂直翻转',
     description: (
       <>
-        可在训练时动态进行数据增强：按 x（水平）/y（垂直）方向翻转。翻转单一轴会有效扩大数据量（原图+翻转图）。
-        需谨慎使用：例如人物上下颠倒或人脸左右互换可能破坏效果；文本翻转通常不可取。
+        可以在训练时即时做数据增强：水平翻转（X 轴）和/或垂直翻转（Y 轴）。翻转一个轴相当于把数据集翻倍（原图 + 翻转图）。很有用，但也要小心：把人上下翻转毫无意义，左右翻转人脸也可能让模型困惑（人的左右脸并不完全一样），文字翻转更是明显有害。
         <br />
         <br />
-        控制图也会按相同方式翻转以与训练图像逐像素对应。
+        控制图会跟着一起翻转，保证像素级对齐。
       </>
     ),
   },
@@ -241,7 +121,7 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '卸载文本编码器',
     description: (
       <>
-        启用后会缓存触发词与示例提示词，并将文本编码器从 GPU 卸载以节省显存。数据集中提供的字幕在训练时会被忽略。
+        卸载文本编码器：只缓存触发词和采样提示词，然后把文本编码器从显存里卸掉。此时数据集里的标注会被忽略。
       </>
     ),
   },
@@ -249,51 +129,40 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '缓存文本嵌入',
     description: (
       <>
-        <small>（实验性）</small>
+        缓存文本嵌入：把文本编码器对所有标注算出的嵌入缓存到磁盘，之后把文本编码器从显存卸载。
         <br />
-        该选项会预处理并将文本编码器生成的所有文本嵌入缓存到磁盘，同时把文本编码器从 GPU 卸载以降低显存占用。
-        对会动态改变提示词的功能（例如触发词、字幕丢弃等）不适用。
+        <br />
+        注意：它不适用于会动态改变提示词的设置（触发词、标注丢弃率等）。
       </>
     ),
   },
   'model.multistage': {
-    title: 'Stages to Train',
+    title: '训练阶段',
     description: (
       <>
-        Some models have multi stage networks that are trained and used separately in the denoising process. Most
-        common, is to have 2 stages. One for high noise and one for low noise. You can choose to train both stages at
-        once or train them separately. If trained at the same time, The trainer will alternate between training each
-        model every so many steps and will output 2 different LoRAs. If you choose to train only one stage, the trainer
-        will only train that stage and output a single LoRA.
+        有些模型是多阶段网络，去噪时分别使用不同阶段。最常见的是两阶段：一个负责高噪声，一个负责低噪声。你可以同时训练两个阶段，也可以只练其中一个。同时训练时，训练器每隔若干步在两个阶段间交替，并输出两个不同的 LoRA；只选一个阶段则只训练它并输出单个 LoRA。
       </>
     ),
   },
   'train.switch_boundary_every': {
-    title: 'Switch Boundary Every',
+    title: '切换边界间隔',
     description: (
       <>
-        When training a model with multiple stages, this setting controls how often the trainer will switch between
-        training each stage.
+        训练多阶段模型时，这个值决定训练器多久在阶段之间切换一次。
         <br />
         <br />
-        For low vram settings, the model not being trained will be unloaded from the gpu to save memory. This takes some
-        time to do, so it is recommended to alternate less often when using low vram. A setting like 10 or 20 is
-        recommended for low vram settings.
+        低显存模式下，当前不训练的模型会被卸载出显存以省内存，而卸载/加载需要时间，所以低显存时建议少切换（10 或 20 这类值）。
         <br />
         <br />
-        The swap happens at the batch level, meaning it will swap between a gradient accumulation steps. To train both
-        stages in a single step, set them to switch every 1 step and set gradient accumulation to 2.
+        切换发生在批次（batch）层面，也就是在梯度累积的步骤之间切换。想在一个 step 内训练两个阶段，可以设为每 1 步切换、并把梯度累积设为 2。
       </>
     ),
   },
   'train.force_first_sample': {
-    title: 'Force First Sample',
+    title: '强制首次采样',
     description: (
       <>
-        This option will force the trainer to generate samples when it starts. The trainer will normally only generate a
-        first sample when nothing has been trained yet, but will not do a first sample when resuming from an existing
-        checkpoint. This option forces a first sample every time the trainer is started. This can be useful if you have
-        changed sample prompts and want to see the new prompts right away.
+        开启后，训练器启动时一定会先出一张采样图。默认情况下，只有当没有任何已训练内容时才会出首张采样图，续训时不会。这个选项让每次启动训练都强制出一张，适合改了采样提示词、想立刻看到效果的场景。
       </>
     ),
   },
@@ -302,29 +171,28 @@ const docs: { [key: string]: ConfigDoc } = {
       <>
         层级卸载{' '}
         <span className="text-yellow-500">
-          ( <IoFlaskSharp className="inline text-yellow-500" name="Experimental" /> 实验性 )
+          ( <IoFlaskSharp className="inline text-yellow-500" name="Experimental" /> Experimental)
         </span>
       </>
     ),
     description: (
       <>
-        该功能基于{' '}
+        这是一个基于{' '}
         <a className="text-blue-500" href="https://github.com/lodestone-rock/RamTorch" target="_blank">
           RamTorch
         </a>
-        ，仍处于早期阶段，后续会频繁更新与调整，因此在不同版本间可能表现不一致，并且只适用于部分模型。
+         的实验性功能。它还处于早期阶段，后续会频繁更新与调整，因此不同版本间可能表现不一致，并且只适用于部分模型。
         <br />
         <br />
-        层级卸载会使用 CPU 内存来承载模型的大部分权重，而不是使用 GPU 显存。这使得在较小显存的显卡上也能训练更大的模型（前提是拥有足够的 CPU 内存）。
-        相比纯 GPU 显存训练，这种方式速度更慢，但 CPU 内存更便宜且可升级。仍然需要一定的 GPU 显存来保存优化器状态与 LoRA 权重，通常仍建议使用较大显存的显卡。
+        层级卸载会使用 CPU 内存来承载模型的大部分权重，而不是占用显存。只要内存足够，就能在小显存的显卡上训练更大的模型。它比纯显存训练慢，但内存更便宜、也更容易升级。优化器状态和 LoRA 权重仍然需要显存，所以显卡通常还是要够大。
         <br />
         <br />
-        你可以选择需要卸载的层所占的百分比。一般来说，为了性能更好，建议尽量少卸载（接近 0%）；如果内存不足，可以适当提高卸载比例。
+        你也可以选择需要卸载的层数百分比。一般来说，为了性能最好尽量少卸载（接近 0%）；显存不足时再往上调。
       </>
     ),
   },
   'model.qie.match_target_res': {
-    title: 'Match Target Res',
+    title: '匹配目标分辨率',
     description: (
       <>
         This setting will make the control images match the resolution of the target image. The official inference
@@ -340,10 +208,7 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '差异化输出保持',
     description: (
       <>
-        差异化输出保持（DOP）用于在训练概念的同时保留其所属类别的知识。需要设置触发词以便将概念与类别区分开来。
-        训练过程中会进行一次“先验预测”：禁用 LoRA，将提示词中的触发词替换为类别词（例如“photo of Alice”→“photo of woman”）。
-        每一步除了正常训练外，还会基于该先验预测与类别提示执行一次额外训练，以帮助 LoRA 保持对类别的认知。
-        这能提升概念的表现，并避免模型把同类对象都生成为同一个概念。
+        DOP（差异化输出保持）是一种在训练中保住原模型对该类概念认知的技术。每一步除了正常训练，还会用带类提示词、LoRA 关闭状态下的预测（先验预测）再跑一步，教 LoRA 保留该类别的知识。它既能提升训练效果，也能让你写出「Alice 站在一个女人旁边」这种提示词时，不会把两个人都画成 Alice。
       </>
     ),
   },
@@ -351,9 +216,7 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '空提示词保持',
     description: (
       <>
-        空提示词保持（BPP）用于在无提示词时保留模型的已有知识，提高灵活性与推理质量（尤其在使用 CFG 时）。
-        训练每一步都会在禁用 LoRA、使用空提示词的情况下进行一次先验预测，并在额外的空提示训练步中将其作为目标，
-        以保持模型在无提示时的泛化能力，避免过度拟合提示词。
+        BPP（空提示词保持）用来保住模型在无提示词时的原有能力。每一步都会用空白提示词、LoRA 关闭状态做一次先验预测，再用这个预测作为额外一步训练的目标。它能让模型更灵活，在推理端用 CFG 时对概念质量也有帮助，避免模型过度依赖提示词、丢掉泛化能力。
       </>
     ),
   },
@@ -361,31 +224,67 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '差分引导',
     description: (
       <>
-        差分引导会在训练期间放大模型预测与目标之间的差异，从而创建一个新的目标。差分引导强度将作为差异的乘数。这仍然是实验性功能，
-        但在我的测试中，它能让模型训练得更快，并且在所有我尝试过的场景中学习细节的效果更好。
+        差分引导会把模型预测与目标之间的差放大，构造出一个新的目标；差分引导强度就是放大的倍数。功能仍属实验性，但在我的测试里，它让模型学得更快、细节也更好。
         <br />
         <br />
-        核心思想是：普通训练会逐渐接近目标但实际上永远无法完全达到，因为它受到学习率的限制。使用差分引导，我们会将差异放大到超越实际目标的新目标，
-        这样可以让模型学会达到或超越目标，而不是达不到目标。
+        原理是：普通训练每一步只会朝目标靠近一点（受学习率限制，永远差一点）。放大差值后，新目标会超过真实目标，于是模型会学着「命中甚至略微超过」目标，而不是总是差一点。
         <br />
         <br />
         <img src="/imgs/diff_guidance_cn_clean.svg" alt="差分引导原理图" className="max-w-full mx-auto rounded-lg shadow-lg" />
       </>
     ),
   },
-  'train.differential_guidance_scale': {
-    title: '差分引导强度',
+  'dataset.num_repeats': {
+    title: '重复次数',
     description: (
       <>
-        控制差分引导效果的强度系数。数值越大，模型预测与目标的差异放大效果越明显，训练时模型会更积极地学习达到或超越目标。
+        重复次数：让数据集里的样本在训练中被重复若干遍。多个数据集搭配使用时，可以用它来平衡各自的出现频率。例如小数据集 10 张、大数据集 100 张，把小数据集设为重复 10 次，两者在训练中出现的概率就一样了。
+      </>
+    ),
+  },
+  'train.audio_loss_multiplier': {
+    title: '音频损失倍率',
+    description: (
+      <>
+        训练音视频时，视频损失的数值有时会远大于音频损失，导致音频学不好甚至失真。出现这种情况可以调高音频损失倍率（例如 2.0、10.0）。注意：调太高会过拟合并损伤模型。
+      </>
+    ),
+  },
+  'datasets.auto_frame_count': {
+    title: '自动帧数',
+    description: (
+      <>
+        自动帧数：为数据集里的每个视频单独决定帧数，而不是统一用固定帧数。这样可以在同一数据集里放不同长度的视频，且不会被加速或减速。注意长视频会占用更多显存；目前 batch size 大于 1 时不可用。
+      </>
+    ),
+  },
+  'model.model_kwargs.kv_cache': {
+    title: 'KV 缓存',
+    description: (
+      <>
+        为支持 KV 缓存的模型开启控制图 KV 缓存。用它训练出来的 LoRA 在推理时也要开启（反之亦然）。它不影响训练速度，但推理时控制图只需处理一次而不是每一步都处理，能显著加速推理。
+      </>
+    ),
+  },
+  'train.guidance_loss_target': {
+    title: '引导损失目标',
+    description: (
+      <>
+        用于对比引导损失：这是要把预测放大到的目标 CGF 值。
+      </>
+    ),
+  },
+  'datasets.caption_dropout_rate': {
+    title: '全局打标丢弃率',
+    description: (
+      <>
+        标注丢弃率：每一步训练时，某张图的标注被丢弃（替换成空标注）的概率。例如 0.05 表示大约 5% 的步数会丢掉标注。
         <br />
         <br />
-        推荐值：3.0（默认）
-        <br />
-        调整范围：0.5 - 10.0
+        丢弃标注能让模型不依赖文字去学概念，并保住无提示词生成的能力。如果设了触发词，丢弃标注时仍会保留触发词，所以模型依然把丢标注的样本和触发词关联起来；正则化图片（没有触发词的图）会直接变成全空标注。
         <br />
         <br />
-        数值过高可能导致训练不稳定，建议从默认值开始，根据训练效果适当调整。
+        缓存文本嵌入时同样支持标注丢弃：会额外缓存一份丢弃后的嵌入（空标注，或只有触发词），训练时按这个概率随机替换。
       </>
     ),
   },

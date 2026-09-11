@@ -1,4 +1,5 @@
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
+import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import useSampleImages from '@/hooks/useSampleImages';
 import SampleImageCard from './SampleImageCard';
 import { Job } from '@prisma/client';
@@ -7,6 +8,7 @@ import { LuImageOff, LuLoader, LuBan } from 'react-icons/lu';
 import { Button } from '@headlessui/react';
 import { FaDownload } from 'react-icons/fa';
 import { apiClient } from '@/utils/api';
+import { encodeFilePathForUrl } from '@/utils/basic';
 import classNames from 'classnames';
 import { FaCaretDown, FaCaretUp } from 'react-icons/fa';
 import SampleImageViewer from './SampleImageViewer';
@@ -29,9 +31,9 @@ export const SampleImagesMenu = ({ job }: SampleImagesMenuProps) => {
       });
 
       const zipPath = res.data.zipPath; // e.g. /mnt/Train2/out/ui/.../samples.zip
-      if (!zipPath) throw new Error('No zipPath in response');
+      if (!zipPath) throw new Error('响应中没有 zipPath');
 
-      const downloadPath = `/api/files/${encodeURIComponent(zipPath)}`;
+      const downloadPath = `/api/files/${encodeFilePathForUrl(zipPath)}`;
       const a = document.createElement('a');
       a.href = downloadPath;
       // optional: suggest filename (browser may ignore if server sets Content-Disposition)
@@ -48,16 +50,19 @@ export const SampleImagesMenu = ({ job }: SampleImagesMenuProps) => {
   return (
     <Button
       onClick={downloadZip}
-      className={classNames(`px-4 py-1 h-8 hover:bg-gray-200 dark:hover:bg-gray-700`, {
-        'opacity-50 cursor-not-allowed': isZipping,
-      })}
+      className={classNames(
+        `flex-1 sm:flex-initial justify-center px-2 sm:px-4 py-1 h-8 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center`,
+        {
+          'opacity-50 cursor-not-allowed': isZipping,
+        },
+      )}
     >
       {isZipping ? (
-        <LuLoader className="animate-spin inline-block mr-2" />
+        <LuLoader className="animate-spin inline-block sm:mr-2" />
       ) : (
-        <FaDownload className="inline-block mr-2" />
+        <FaDownload className="inline-block sm:mr-2" />
       )}
-      {isZipping ? 'Preparing' : 'Download'}
+      <span className="hidden sm:inline">{isZipping ? 'Preparing' : '下载'}</span>
     </Button>
   );
 };
@@ -69,8 +74,9 @@ interface SampleImagesProps {
 export default function SampleImages({ job }: SampleImagesProps) {
   const { sampleImages, status, refreshSampleImages } = useSampleImages(job.id, 5000);
   const [selectedSamplePath, setSelectedSamplePath] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const didFirstScroll = useRef(false);
+  const [scrollParent, setScrollParent] = useState<HTMLDivElement | null>(null);
+  const scrollParentCallback = useCallback((el: HTMLDivElement | null) => setScrollParent(el), []);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
   const numSamples = useMemo(() => {
     if (job?.job_config) {
       const jobConfig = JSON.parse(job.job_config) as JobConfig;
@@ -82,16 +88,21 @@ export default function SampleImages({ job }: SampleImagesProps) {
     return 10;
   }, [job]);
 
-  const scrollToBottom = () => {
-    if (containerRef.current) {
-      containerRef.current.scrollTo({ top: containerRef.current.scrollHeight, behavior: 'instant' });
+  // Group samples into rows of `numSamples` for the virtualized list — one row per sample iteration.
+  const rows = useMemo(() => {
+    const out: string[][] = [];
+    for (let i = 0; i < sampleImages.length; i += numSamples) {
+      out.push(sampleImages.slice(i, i + numSamples));
     }
+    return out;
+  }, [sampleImages, numSamples]);
+
+  const scrollToBottom = () => {
+    virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end' });
   };
 
   const scrollToTop = () => {
-    if (containerRef.current) {
-      containerRef.current.scrollTo({ top: 0, behavior: 'instant' });
-    }
+    virtuosoRef.current?.scrollToIndex({ index: 0, align: 'start' });
   };
 
   const PageInfoContent = useMemo(() => {
@@ -107,8 +118,8 @@ export default function SampleImages({ job }: SampleImagesProps) {
 
     if (status == 'loading') {
       icon = <LuLoader className="animate-spin w-8 h-8" />;
-      text = 'Loading Samples';
-      subtitle = 'Please wait while we fetch your samples...';
+      text = '正在加载样本';
+      subtitle = '正在获取样本…';
       showIt = true;
       bgColor = 'bg-gray-50 dark:bg-gray-800/50';
       textColor = 'text-gray-900 dark:text-gray-100';
@@ -116,8 +127,8 @@ export default function SampleImages({ job }: SampleImagesProps) {
     }
     if (status == 'error') {
       icon = <LuBan className="w-8 h-8" />;
-      text = 'Error Loading Samples';
-      subtitle = 'There was a problem fetching the samples.';
+      text = '加载样本出错';
+      subtitle = '获取样本时出错。';
       showIt = true;
       bgColor = 'bg-red-50 dark:bg-red-950/20';
       textColor = 'text-red-900 dark:text-red-100';
@@ -125,8 +136,8 @@ export default function SampleImages({ job }: SampleImagesProps) {
     }
     if (status == 'success' && sampleImages.length === 0) {
       icon = <LuImageOff className="w-8 h-8" />;
-      text = 'No Samples Found';
-      subtitle = 'No samples have been generated yet';
+      text = '未找到样本';
+      subtitle = '还没有生成样本';
       showIt = true;
       bgColor = 'bg-gray-50 dark:bg-gray-800/50';
       textColor = 'text-gray-900 dark:text-gray-100';
@@ -146,25 +157,9 @@ export default function SampleImages({ job }: SampleImagesProps) {
     );
   }, [status, sampleImages.length]);
 
-  // 将样例图栅格改为响应式：
-  // - 手机端两列（更易于浏览）
-  // - 随屏幕大小逐步增加列数，但限制为最多 8 列
-  // 直接返回明确的 Tailwind 类，避免被构建时清理
-  const gridColsClass = useMemo(() => {
-    // 当每次采样只生成1张图片时，默认从单列开始，避免出现大面积空白
-    const cols = Math.min(numSamples, 8);
-    const map: { [key: number]: string } = {
-      1: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3',
-      2: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4',
-      3: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4',
-      4: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5',
-      5: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
-      6: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7',
-      7: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7',
-      8: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8',
-    };
-    return map[cols] || 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4';
-  }, [numSamples]);
+  // Inline style instead of Tailwind grid-cols-N classes — Tailwind only ships grid-cols-1..12,
+  // so class-based columns silently break for larger sample counts.
+  const gridCols = Math.max(numSamples, 3);
 
   const sampleConfig = useMemo(() => {
     if (job?.job_config) {
@@ -174,56 +169,49 @@ export default function SampleImages({ job }: SampleImagesProps) {
     return null;
   }, [job]);
 
-  // scroll to bottom on first load of samples
-  useEffect(() => {
-    if (status === 'success' && sampleImages.length > 0 && !didFirstScroll.current) {
-      didFirstScroll.current = true;
-      setTimeout(() => {
-        scrollToBottom();
-      }, 100);
-    }
-  }, [status, sampleImages.length]);
-
   return (
-    <div ref={containerRef} className="absolute top-[80px] left-0 right-0 bottom-0 overflow-y-auto">
+    <div ref={scrollParentCallback} className="absolute top-[80px] left-0 right-0 bottom-0 overflow-y-auto">
       <div className="pb-4">
         {PageInfoContent}
-        {sampleImages && (
-          <div className={`grid ${gridColsClass} gap-1`}>
-            {sampleImages.map((sample: string, idx: number) => {
-              // Compute current group (groups are size = numSamples)
-              const groupIndex = Math.floor(idx / numSamples);
-              const groupStart = groupIndex * numSamples;
-              const groupEnd = Math.min(groupStart + numSamples, sampleImages.length);
-              const groupSize = groupEnd - groupStart;
-              const isEndOfGroup = idx === groupEnd - 1;
+        {sampleImages && rows.length > 0 && scrollParent && (
+          <Virtuoso
+            ref={virtuosoRef}
+            customScrollParent={scrollParent}
+            totalCount={rows.length}
+            initialTopMostItemIndex={rows.length - 1}
+            followOutput="auto"
+            increaseViewportBy={400}
+            computeItemKey={index => rows[index]?.[0] ?? index}
+            itemContent={index => {
+              const row = rows[index];
+              if (!row) return null;
 
-              // Only enforce a MIN of 3 when the group's planned width is < 3
-              // 当单张采样时不进行占位填充，避免“每次采样之间有两格空白”的视觉问题
-              const MIN_COLS = numSamples <= 1 ? 1 : 3;
-              const shouldPad = numSamples < MIN_COLS && groupSize < MIN_COLS;
-              const padsNeeded = shouldPad ? MIN_COLS - groupSize : 0;
+              // Only pad the final row when numSamples < MIN_COLS and the row is short.
+              const MIN_COLS = 3;
+              const shouldPad = numSamples < MIN_COLS && row.length < MIN_COLS;
+              const padsNeeded = shouldPad ? MIN_COLS - row.length : 0;
 
               return (
-                <div key={sample} className="contents">
-                  <SampleImageCard
-                    imageUrl={sample}
-                    numSamples={numSamples}
-                    sampleImages={sampleImages}
-                    alt="Sample Image"
-                    onClick={() => setSelectedSamplePath(sample)}
-                    observerRoot={containerRef.current}
-                  />
-
-                  {isEndOfGroup &&
-                    padsNeeded > 0 &&
-                    Array.from({ length: padsNeeded }).map((_, i) => (
-                      <div key={`pad-${groupIndex}-${i}`} className="invisible" />
-                    ))}
+                // pb-1 recreates the vertical gap between rows that the original single CSS grid provided via `gap-1`.
+                <div className="grid gap-1 pb-1" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}>
+                  {row.map(sample => (
+                    <SampleImageCard
+                      key={sample}
+                      imageUrl={sample}
+                      numSamples={numSamples}
+                      sampleImages={sampleImages}
+                      alt="采样图"
+                      onClick={() => setSelectedSamplePath(sample)}
+                      observerRoot={scrollParent}
+                    />
+                  ))}
+                  {Array.from({ length: padsNeeded }).map((_, i) => (
+                    <div key={`pad-${index}-${i}`} className="invisible" />
+                  ))}
                 </div>
               );
-            })}
-          </div>
+            }}
+          />
         )}
       </div>
       <SampleImageViewer
@@ -235,16 +223,16 @@ export default function SampleImages({ job }: SampleImagesProps) {
         refreshSampleImages={refreshSampleImages}
       />
       <div
-        className="fixed top-20 mt-4 right-6 w-10 h-10 rounded-full bg-gray-900 shadow-lg flex items-center justify-center text-white opacity-80 hover:opacity-100 cursor-pointer"
+        className="hidden md:flex fixed top-20 mt-4 right-6 w-10 h-10 rounded-full bg-gray-900 shadow-lg items-center justify-center text-white opacity-80 hover:opacity-100 cursor-pointer"
         onClick={scrollToTop}
-        title="Scroll to Top"
+        title="滚到顶部"
       >
         <FaCaretUp className="text-gray-500 dark:text-gray-400" />
       </div>
       <div
-        className="fixed bottom-5 right-6 w-10 h-10 rounded-full bg-gray-900 shadow-lg flex items-center justify-center text-white opacity-80 hover:opacity-100 cursor-pointer"
+        className="hidden md:flex fixed bottom-5 right-6 w-10 h-10 rounded-full bg-gray-900 shadow-lg items-center justify-center text-white opacity-80 hover:opacity-100 cursor-pointer"
         onClick={scrollToBottom}
-        title="Scroll to Bottom"
+        title="滚到底部"
       >
         <FaCaretDown className="text-gray-500 dark:text-gray-400" />
       </div>

@@ -22,7 +22,9 @@ class OmniGen2RotaryPosEmbed(nn.Module):
                       axes_lens: Tuple[int, int, int],
                       theta: int) -> List[torch.Tensor]:
         freqs_cis = []
-        freqs_dtype = torch.float32 if torch.backends.mps.is_available() else torch.float64
+        # XPU/MPS have no fp64 → fp32 there
+        from toolkit.device_utils import rope_dtype
+        freqs_dtype = rope_dtype()
         for i, (d, e) in enumerate(zip(axes_dim, axes_lens)):
             emb = get_1d_rotary_pos_embed(d, e, theta=theta, freqs_dtype=freqs_dtype)
             freqs_cis.append(emb)

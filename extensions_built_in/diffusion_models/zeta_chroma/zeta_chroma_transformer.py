@@ -293,7 +293,11 @@ class RopeEmbedder:
                     theta
                     ** (torch.arange(0, d, 2, dtype=torch.float64, device="cpu") / d)
                 )
-                timestep = torch.arange(e, device=freqs.device, dtype=torch.float64)
+                # XPU/MPS have no fp64 → fp32 there
+                from toolkit.device_utils import rope_dtype
+                timestep = torch.arange(
+                    e, device=freqs.device, dtype=rope_dtype(freqs.device)
+                )
                 freqs = torch.outer(timestep, freqs).float()
                 freqs_cis_i = torch.polar(torch.ones_like(freqs), freqs).to(
                     torch.complex64

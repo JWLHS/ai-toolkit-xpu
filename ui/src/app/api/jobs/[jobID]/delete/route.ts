@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import prisma from '@/server/prisma';
 import { getTrainingFolder } from '@/server/settings';
 import path from 'path';
 import fs from 'fs';
-
-const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest, { params }: { params: { jobID: string } }) {
   const { jobID } = await params;
@@ -14,15 +12,14 @@ export async function GET(request: NextRequest, { params }: { params: { jobID: s
   });
 
   if (!job) {
-    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    return NextResponse.json({ error: '任务不存在' }, { status: 404 });
   }
 
   const trainingRoot = await getTrainingFolder();
   const trainingFolder = path.join(trainingRoot, job.name);
 
-  if (fs.existsSync(trainingFolder)) {
-    fs.rmdirSync(trainingFolder, { recursive: true });
-  }
+  // force:true makes this a no-op if the folder is already gone
+  await fs.promises.rm(trainingFolder, { recursive: true, force: true });
 
   await prisma.job.delete({
     where: { id: jobID },

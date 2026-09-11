@@ -1379,7 +1379,10 @@ class SDTrainer(BaseSDTrainProcess):
         )
     
 
-    def train_single_accumulation(self, batch: DataLoaderBatchDTO):
+    def train_single_accumulation(self, batch: DataLoaderBatchDTO, accum_scale: float = 1.0):
+        # accum_scale: 1 / number of micro-batches accumulated per optimizer step, so the
+        # summed gradients equal the mean over the effective batch. Applied to the backward
+        # only; the returned loss stays unscaled for logging.
         with torch.no_grad():
             self.timer.start('preprocess_batch')
             if isinstance(self.adapter, CustomAdapter):
@@ -2256,7 +2259,7 @@ class SDTrainer(BaseSDTrainProcess):
                     # if self.is_bfloat:
                     # loss.backward()
                     # else:
-                    self.accelerator.backward(loss)
+                    self.accelerator.backward(loss * accum_scale if accum_scale != 1.0 else loss)
 
         return loss.detach()
         # flush()
@@ -2268,6 +2271,12 @@ class SDTrainer(BaseSDTrainProcess):
             batch_list = [batch]
         total_loss = None
         self.optimizer.zero_grad()
+        # micro-batches per optimizer step: a batch list (gradient_accumulation) or repeated
+        # calls (gradient_accumulation_steps). -1 (whole epoch) has no fixed count; left summed.
+        n_accum = len(batch_list)
+        if self.train_config.gradient_accumulation_steps > 1:
+            n_accum *= self.train_config.gradient_accumulation_steps
+        accum_scale = 1.0 / n_accum
         for batch in batch_list:
             if self.sd.is_multistage:
                 # handle multistage switching
@@ -2281,7 +2290,7 @@ class SDTrainer(BaseSDTrainProcess):
                         if self.current_boundary_index in self.sd.trainable_multistage_boundaries:
                             # if this boundary is trainable, we can stop looking
                             break
-            loss = self.train_single_accumulation(batch)
+            loss = self.train_single_accumulation(batch, accum_scale=accum_scale)
             self.steps_this_boundary += 1
             if total_loss is None:
                 total_loss = loss
@@ -2315,6 +2324,35 @@ class SDTrainer(BaseSDTrainProcess):
         else:
             # gradient accumulation. Just a place for breakpoint
             pass
+
+        # XPU: the bounce/staging path allocates differently-shaped weight buffers every
+        # call, so the caching allocator's reserved pool only grows (measured: 1.3GB in
+        # use vs 18.3GB reserved on a 16GB Arc A770 → spilled into shared memory and
+        # steps dropped from ~22s to ~40s). Hand the unused blocks back to the driver
+        # each optimizer step; opt out with AITK_XPU_EMPTY_CACHE=0.
+        if (
+            self.device_torch.type == "xpu"
+            and not self.is_grad_accumulation_step
+            and os.environ.get("AITK_XPU_EMPTY_CACHE", "1") != "0"
+        ):
+            try:
+                torch.xpu.empty_cache()
+            except Exception:
+                pass
+
+        # XPU memory probe (opt-in): distinguishes "actually in use" from allocator cache.
+        if os.environ.get("AITK_MEM_DEBUG") == "1":
+            try:
+                if self.device_torch.type == "xpu":
+                    alloc = torch.xpu.memory_allocated(self.device_torch) / 2**30
+                    reserv = torch.xpu.memory_reserved(self.device_torch) / 2**30
+                    peak = torch.xpu.max_memory_reserved(self.device_torch) / 2**30
+                    print(
+                        f"[mem] allocated={alloc:.2f}GB reserved={reserv:.2f}GB peak_reserved={peak:.2f}GB",
+                        flush=True,
+                    )
+            except Exception as e:
+                print(f"[mem] probe failed: {e}", flush=True)
 
         # TODO Should we only step scheduler on grad step? If so, need to recalculate last step
         with self.timer('scheduler_step'):

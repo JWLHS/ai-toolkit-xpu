@@ -417,7 +417,7 @@ export const defaultIdeogramSamplesConfig: SampleConfig = {
 {
   "high_level_description": "A 35mm film photograph of a red-haired woman in a green jacket playing chess at an outdoor park table, mid-move over a wooden board, while a fiery explosion erupts from a building in the distant background.",
   "style_description": {
-    "aesthetics": "Cinematic, tense, candid realism.",
+    "aesthetics": "电影感、紧张、抓拍写实。",
     "lighting": "Overcast afternoon daylight, soft and low-contrast, cool-neutral white balance.",
     "photo": "35mm film still, subtle grain, natural depth of field.",
     "medium": "photograph",
@@ -466,7 +466,7 @@ export const defaultIdeogramSamplesConfig: SampleConfig = {
 {
   "high_level_description": "A 35mm film photograph of a woman in a grey beanie holding a coffee cup while sitting at a wooden cafe table by a window, with a blurred cafe interior behind her.",
   "style_description": {
-    "aesthetics": "Cozy, relaxed, intimate.",
+    "aesthetics": "温馨、放松、私密感。",
     "lighting": "Soft diffused window daylight, cool-neutral white balance, low contrast.",
     "photo": "35mm film still, shallow depth of field, subtle grain.",
     "medium": "photograph",
@@ -536,7 +536,7 @@ export const defaultIdeogramSamplesConfig: SampleConfig = {
 {
   "high_level_description": "A fish-eye lens photograph of a horse DJing behind turntables at a packed night club, holding a martini glass, surrounded by laser lights and drifting smoke-machine haze on a glowing dance floor.",
   "style_description": {
-    "aesthetics": "High-energy, surreal, neon nightlife.",
+    "aesthetics": "高能量、超现实、霓虹夜生活。",
     "lighting": "Dim club lighting with magenta and cyan washes and crisscrossing green and magenta laser beams cutting through haze.",
     "photo": "Fish-eye lens with strong barrel distortion, deep shadow contrast.",
     "medium": "photograph",
@@ -596,7 +596,7 @@ export const defaultIdeogramSamplesConfig: SampleConfig = {
 {
   "high_level_description": "A 35mm film photograph of a smiling man proudly showing off his graphic t-shirt on a sandy beach, with a great white shark leaping out of the ocean in the background.",
   "style_description": {
-    "aesthetics": "Bright, playful, candid.",
+    "aesthetics": "明亮、活泼、抓拍感。",
     "lighting": "Bright overcast daylight, soft and shadowless, cool-neutral white balance.",
     "photo": "35mm film still, natural depth of field, subtle grain.",
     "medium": "photograph",
@@ -646,7 +646,7 @@ export const defaultIdeogramSamplesConfig: SampleConfig = {
 {
   "high_level_description": "A brown grizzly bear standing upright on its hind legs, lifting a wooden log onto a half-built log cabin in a snow-covered mountain clearing, with snowy pine forest and peaks behind, rendered as a 35mm film photograph.",
   "style_description": {
-    "aesthetics": "Serene, rugged, wintry.",
+    "aesthetics": "宁静、粗犷、冬日。",
     "lighting": "Pale overcast winter daylight, even and shadowless, cool-neutral white balance.",
     "photo": "35mm film still, subtle grain, soft natural focus.",
     "medium": "photograph",
@@ -705,7 +705,7 @@ export const defaultIdeogramSamplesConfig: SampleConfig = {
 {
   "high_level_description": "A punk rocker woman mid-performance on a concert stage, playing an electric guitar and singing into a microphone, with laser lights cutting through haze in a 35mm concert photograph.",
   "style_description": {
-    "aesthetics": "Gritty, energetic, high-contrast.",
+    "aesthetics": "粗砺、有能量、高对比。",
     "lighting": "Dark stage lit by green and magenta laser beams through haze, deep shadow contrast, cool-neutral white balance.",
     "photo": "35mm concert photograph, subtle grain, deep contrast.",
     "medium": "photograph",
@@ -775,7 +775,7 @@ export const defaultIdeogramSamplesConfig: SampleConfig = {
 {
   "high_level_description": "A 35mm film photograph of a bearded hipster man assembling a wooden chair on a workbench in a cluttered woodworking shop, surrounded by hand tools and lumber.",
   "style_description": {
-    "aesthetics": "Rustic, focused, artisanal.",
+    "aesthetics": "质朴、聚焦、手作感。",
     "lighting": "Diffused overcast daylight from a high window, cool-neutral white balance, low contrast.",
     "photo": "35mm film still, subtle grain, natural depth of field.",
     "medium": "photograph",
@@ -845,7 +845,7 @@ export const defaultIdeogramSamplesConfig: SampleConfig = {
 {
   "high_level_description": "A studio fashion photograph of a man in a medium shot modeling a casual outfit against a seamless white backdrop, lit with even studio lighting.",
   "style_description": {
-    "aesthetics": "Clean, minimal, editorial.",
+    "aesthetics": "干净、极简、杂志感。",
     "lighting": "Even diffused studio softbox lighting, neutral white balance, shadowless.",
     "photo": "Studio fashion photograph, sharp focus, seamless white cyclorama.",
     "medium": "photograph",
@@ -874,7 +874,7 @@ export const defaultIdeogramSamplesConfig: SampleConfig = {
 {
   "high_level_description": "A 35mm film photograph of a man standing on a city sidewalk holding a white cardboard sign reading 'this is a sign', shot at eye-level with neutral daylight.",
   "style_description": {
-    "aesthetics": "Plain, candid, documentary.",
+    "aesthetics": "朴素、抓拍、纪实。",
     "lighting": "Overcast daylight, soft and even, cool-neutral white balance.",
     "photo": "35mm film still, eye-level, subtle grain.",
     "medium": "photograph",
@@ -924,7 +924,7 @@ export const defaultIdeogramSamplesConfig: SampleConfig = {
 {
   "high_level_description": "A 35mm film photograph of a muscular bulldog in a worn leather jacket standing beside a battered motorcycle in a post-apocalyptic desert, gripping a sawed-off shotgun, with a hazy ruined skyline on the horizon.",
   "style_description": {
-    "aesthetics": "Rugged, cinematic, post-apocalyptic.",
+    "aesthetics": "粗犷、电影感、末日风。",
     "lighting": "Pale dust-choked daylight softened by airborne grit, cool-neutral white balance, low contrast.",
     "photo": "35mm film still, subtle grain, hazy distance.",
     "medium": "photograph",

@@ -27,6 +27,26 @@ _DEVICE_STATE = {}
 # stalling on a per-layer sync. Override with AI_TOOLKIT_OFFLOAD_DEPTH.
 PIPELINE_DEPTH = int(os.environ.get("AI_TOOLKIT_OFFLOAD_DEPTH", "4"))
 
+# --- XPU: keep the caching allocator from hoarding distinct block sizes ---------
+# The XPU bounce path materializes one dequantized (bf16) weight per linear layer,
+# and a krea2-class transformer has ~256 distinct layer shapes. PyTorch's caching
+# allocator keeps a block per size, so the reserved pool grows to the sum of all
+# layers (~18GB on a 16GB Arc A770, measured) even though only ~1.3GB is live.
+# Handing unused blocks back to the driver every N bounce calls caps that growth.
+_XPU_BOUNCE_TICK = [0]
+_XPU_EMPTY_CACHE_EVERY = int(os.environ.get("AI_TOOLKIT_XPU_EMPTY_CACHE_EVERY", "24"))
+
+
+def _xpu_tick_and_maybe_empty_cache():
+    if _XPU_EMPTY_CACHE_EVERY <= 0:
+        return
+    _XPU_BOUNCE_TICK[0] += 1
+    if _XPU_BOUNCE_TICK[0] % _XPU_EMPTY_CACHE_EVERY == 0:
+        try:
+            torch.xpu.empty_cache()
+        except Exception:
+            pass
+
 
 def _get_device_state(device: torch.device):
     """Get or initialize per-device state."""
@@ -305,6 +325,7 @@ class _BouncingLinearFn(torch.autograd.Function):
 
         # XPU path: simple execution without streams (Unified Memory handles it)
         if device.type == "xpu":
+            _xpu_tick_and_maybe_empty_cache()
             w = _materialize_linear_weight(weight_cpu, device)
             b = bias_cpu.to(device, non_blocking=True) if bias_cpu is not None else None
             out = F.linear(x, w.to(x.dtype), b.to(x.dtype) if b is not None else None)
@@ -348,6 +369,7 @@ class _BouncingLinearFn(torch.autograd.Function):
 
         # XPU path: simple execution
         if device.type == "xpu":
+            _xpu_tick_and_maybe_empty_cache()
             w_mat = (
                 weight_cpu.dequantize()
                 if _is_quantized_tensor(weight_cpu)
@@ -496,6 +518,7 @@ class _BouncingConv2dFn(torch.autograd.Function):
 
         # XPU path
         if device.type == "xpu":
+            _xpu_tick_and_maybe_empty_cache()
             w = _materialize_conv_weight(weight_cpu, device)
             b = bias_cpu.to(device, non_blocking=True) if bias_cpu is not None else None
             out = F.conv2d(x, w.to(x.dtype), b.to(x.dtype) if b is not None else b, stride, padding, dilation, groups)
@@ -537,6 +560,7 @@ class _BouncingConv2dFn(torch.autograd.Function):
 
         # XPU path
         if isinstance(device, torch.device) and device.type == "xpu":
+            _xpu_tick_and_maybe_empty_cache()
             w_cpu = (
                 weight_cpu.dequantize()
                 if _is_quantized_tensor(weight_cpu)

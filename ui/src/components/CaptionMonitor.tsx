@@ -20,7 +20,8 @@ interface CaptionMonitorProps {
 // info, and the live log.
 export default function CaptionMonitor({ datasetPath, onHeightChange }: CaptionMonitorProps) {
   const { job, status, refreshJob } = useJobByRef(datasetPath, 3000);
-  const [collapsed, setCollapsed] = useState(false);
+  // Start collapsed; an active run pops it open via the effect below.
+  const [collapsed, setCollapsed] = useState(true);
 
   const isActive = !!(job && (job.status === 'running' || job.status === 'queued'));
 
@@ -68,12 +69,13 @@ export default function CaptionMonitor({ datasetPath, onHeightChange }: CaptionM
   }, [log, isScrolledToBottom]);
 
   // Animate the docked height instead of translating, so the collapsed panel
-  // never extends below the container and adds scroll. Inactive -> 0 (hidden),
-  // collapsed -> just the header bar, expanded -> full panel.
+  // never extends below the container and adds scroll. No job for this
+  // dataset -> 0 (hidden), collapsed -> just the header bar, expanded ->
+  // full panel. The most recent captioning job is shown even when finished.
   const HEADER_HEIGHT = 44;
   const PANEL_HEIGHT = 300;
   let height = 0;
-  if (isActive) height = collapsed ? HEADER_HEIGHT : PANEL_HEIGHT;
+  if (job) height = collapsed ? HEADER_HEIGHT : PANEL_HEIGHT;
 
   useEffect(() => {
     onHeightChange?.(height);
@@ -107,12 +109,12 @@ export default function CaptionMonitor({ datasetPath, onHeightChange }: CaptionM
               </span>
             </div>
           )}
-          <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="flex items-center gap-3 flex-shrink-0 ml-auto">
             {job && <JobActionBar job={job} onRefresh={refreshJob} autoStartQueue={true} menuAnchor="top end" />}
             <button
               onClick={() => setCollapsed(c => !c)}
               className="text-gray-400 hover:text-gray-100"
-              title={collapsed ? 'Show' : 'Hide'}
+              title={collapsed ? '显示' : '隐藏'}
             >
               {collapsed ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
             </button>
@@ -128,8 +130,8 @@ export default function CaptionMonitor({ datasetPath, onHeightChange }: CaptionM
                 className="text-xs text-gray-300 absolute inset-0 p-3 overflow-y-auto"
                 onScroll={handleScroll}
               >
-                {statusLog === 'loading' && 'Loading log...'}
-                {statusLog === 'error' && 'Error loading log'}
+                {statusLog === 'loading' && '正在加载日志…'}
+                {statusLog === 'error' && '加载日志出错'}
                 {['success', 'refreshing'].includes(statusLog) && (
                   <div>
                     {logLines.map((line, index) => (

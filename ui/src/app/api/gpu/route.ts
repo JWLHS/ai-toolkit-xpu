@@ -1,146 +1,251 @@
-import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { NextResponse } from 'next/server';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import os from 'os';
+import { cached } from '@/server/apiCache';
+import { loadMacstats } from '@/server/macstats';
+import { sampleXpuAny } from '@/server/xpuSmi';
 
 const execAsync = promisify(exec);
 
-/* ============================================================
-   GET /api/gpu  ——  支持多 GPU / XPU 显存实时监控
-   ============================================================ */
-export async function GET() {
+interface MacGpuResult {
+  name: string;
+  memUsed: number;
+  memTotal: number;
+  gpuLoad: number;
+  temperature: number;
+  powerDraw: number;
+}
+
+async function getMacGpuInfo(): Promise<MacGpuResult | null> {
   try {
-    // 检查 xpu-smi 是否可用
-    const hasXpu = await checkXpuSmi();
-    if (!hasXpu) {
-      return NextResponse.json({
-        backend: "none",
+    const memoryTotal = os.totalmem() / (1024 * 1024);
+
+    // Get GPU name and core count from system_profiler
+    let gpuName = 'Apple GPU';
+    try {
+      const { stdout: spOut } = await execAsync(
+        'system_profiler SPDisplaysDataType 2>/dev/null | grep -E "Chipset Model|Total Number of Cores"',
+        { encoding: 'utf-8', timeout: 5000 },
+      );
+      const nameMatch = spOut.match(/Chipset Model:\s*(.+)/);
+      const coresMatch = spOut.match(/Total Number of Cores:\s*(\d+)/);
+      if (nameMatch) {
+        gpuName = nameMatch[1].trim();
+        if (coresMatch) {
+          gpuName += ` GPU (${coresMatch[1]} cores)`;
+        }
+      }
+    } catch {
+      // fallback to generic name
+    }
+
+    let temperature = 0;
+    let gpuLoad = 0;
+    let powerDraw = 0;
+    let memUsed = 0;
+    let memTotal = memoryTotal;
+
+    const ms = loadMacstats();
+    if (ms) {
+      try {
+        const gpuData = ms.getGpuDataSync();
+        temperature = gpuData.temperature || 0;
+        gpuLoad = gpuData.usage || 0;
+      } catch {
+        // ignore
+      }
+
+      try {
+        const powerData = ms.getPowerDataSync();
+        powerDraw = powerData.gpu || 0;
+      } catch {
+        // ignore
+      }
+
+      try {
+        const ramData = ms.getRAMUsageSync();
+        memUsed = ramData.used / (1024 * 1024);
+        memTotal = ramData.total / (1024 * 1024);
+      } catch {
+        // ignore
+      }
+    }
+
+    return { name: gpuName, memUsed, memTotal, gpuLoad, temperature, powerDraw };
+  } catch {
+    return null;
+  }
+}
+
+async function getGpuInfo() {
+  // Get platform
+  const platform = os.platform();
+  const isWindows = platform === 'win32';
+  const isMac = platform === 'darwin';
+
+  if (isMac) {
+    const macGpu = await getMacGpuInfo();
+    if (macGpu) {
+      return {
         hasNvidiaSmi: false,
-        gpus: [],
-        error: "xpu-smi not found",
-      });
+        isMac: true,
+        gpus: [
+          {
+            index: 0,
+            name: macGpu.name,
+            driverVersion: 'macOS',
+            temperature: Math.round(macGpu.temperature),
+            utilization: {
+              gpu: macGpu.gpuLoad,
+              memory: macGpu.memTotal > 0 ? Math.round((macGpu.memUsed / macGpu.memTotal) * 100) : 0,
+            },
+            memory: {
+              total: Math.round(macGpu.memTotal),
+              free: Math.round(macGpu.memTotal - macGpu.memUsed),
+              used: Math.round(macGpu.memUsed),
+            },
+            power: { draw: macGpu.powerDraw, limit: 0 },
+            clocks: { graphics: 0, memory: 0 },
+          },
+        ],
+      };
     }
+    return {
+      hasNvidiaSmi: false,
+      isMac: true,
+      gpus: [],
+      error: 'Could not read Mac GPU stats',
+    };
+  }
 
-    // STEP 1 —— 获取所有 GPU 列表
-    const discovery = await getDeviceList();
-    const deviceList = discovery.device_list ?? [];
+  // Check if nvidia-smi is available
+  const hasNvidiaSmi = await checkNvidiaSmi(isWindows);
 
-    if (deviceList.length === 0) {
-      return NextResponse.json({
-        backend: "xpu",
-        hasNvidiaSmi: true,
-        gpus: [],
-        error: "No XPU devices found",
-      });
-    }
+  if (!hasNvidiaSmi) {
+    return {
+      hasNvidiaSmi: false,
+      isMac: false,
+      gpus: [],
+      error: 'nvidia-smi not found or not accessible',
+    };
+  }
 
-    // STEP 2 —— 遍历每个 GPU，读取完整信息
-    const result = [];
+  // Get GPU stats
+  const gpuStats = await getGpuStats(isWindows);
 
-    for (const dev of deviceList) {
-      const id = dev.device_id;
+  return {
+    hasNvidiaSmi: true,
+    gpus: gpuStats,
+  };
+}
 
-      // 获取含显存信息的详细 JSON
-      const fullInfo = await getDeviceDetails(id);
-
-      // 解析显存总量/剩余量
-      const memTotalMiB = fullInfo.memory_physical_size_byte
-        ? Math.round(Number(fullInfo.memory_physical_size_byte) / 1024 / 1024)
-        : 0;
-
-      const memFreeMiB = fullInfo.memory_free_size_byte
-        ? Math.round(Number(fullInfo.memory_free_size_byte) / 1024 / 1024)
-        : Math.max(0, memTotalMiB - 1024); // fallback
-
-      // STEP 3 —— 解析 dump 数据（实时 GPU 性能）
-      const stats = await getDumpStats(id);
-
-      // 组合输出（保持 UI 兼容）
-      result.push({
-        index: id,
-        name: fullInfo.device_name ?? "Intel XPU",
-        driverVersion: fullInfo.driver_version ?? "unknown",
-
-        temperature: stats.temperature,
-        utilization: {
-          gpu: stats.gpuUtil,
-          memory: stats.memUtil,
-        },
-
-        memory: {
-          total: memTotalMiB,
-          used: stats.memUsed, // dump 中的实时显存使用（MiB）
-          free: memTotalMiB > 0 ? memTotalMiB - stats.memUsed : memFreeMiB,
-        },
-
-        power: stats.power,
-        frequency: stats.freq,
-      });
-    }
-
+export async function GET() {
+  // Intel Arc / XPU first: on XPU boxes nvidia-smi is absent and the platform
+  // paths below would report "no GPU". Falls back to torch when xpu-smi
+  // (Intel XPU Manager) is not installed. Fall through if neither works.
+  const xpu = await sampleXpuAny();
+  if (xpu) {
     return NextResponse.json({
-      backend: "xpu",
-      hasNvidiaSmi: true,
-      gpus: result,
+      backend: 'xpu',
+      hasNvidiaSmi: false,
+      isMac: false,
+      gpus: xpu.gpus,
+      error:
+        xpu.source === 'torch'
+          ? '仅能读取型号与显存（未安装 xpu-smi，Level Zero Sysman 也不可用）'
+          : undefined,
     });
-  } catch (err) {
+  }
+  try {
+    const gpuInfo = await cached('gpu-info', getGpuInfo);
+    return NextResponse.json(gpuInfo);
+  } catch (error) {
+    console.error('Error fetching NVIDIA GPU stats:', error);
     return NextResponse.json(
       {
-        backend: "error",
         hasNvidiaSmi: false,
+        isMac: false,
         gpus: [],
-        error: err instanceof Error ? err.message : String(err),
+        error: `Failed to fetch GPU stats: ${error instanceof Error ? error.message : String(error)}`,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
-/* ============================================================
-   工具函数区域
-   ============================================================ */
-
-// --- 判断 xpu-smi 是否可用 ---
-async function checkXpuSmi() {
+async function checkNvidiaSmi(isWindows: boolean): Promise<boolean> {
   try {
-    await execAsync("xpu-smi -h");
+    if (isWindows) {
+      // Check if nvidia-smi is available on Windows
+      // It's typically located in C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe
+      // but we'll just try to run it directly as it may be in PATH
+      await execAsync('nvidia-smi -L');
+    } else {
+      // Linux/macOS check
+      await execAsync('which nvidia-smi');
+    }
     return true;
-  } catch {
+  } catch (error) {
     return false;
   }
 }
 
-// --- 获取设备列表（不含显存）---
-async function getDeviceList() {
-  const { stdout } = await execAsync("xpu-smi discovery -j");
-  return JSON.parse(stdout);
-}
+async function getGpuStats(isWindows: boolean) {
+  // Command is the same for both platforms, but the path might be different
+  const command =
+    'nvidia-smi --query-gpu=index,name,driver_version,temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used,power.draw,power.limit,clocks.current.graphics,clocks.current.memory --format=csv,noheader,nounits';
 
-// --- 获取单个 GPU 的完整信息（含显存）---
-async function getDeviceDetails(id: number) {
-  const { stdout } = await execAsync(`xpu-smi discovery -d ${id} -j`);
-  return JSON.parse(stdout);
-}
+  // Execute command
+  const { stdout } = await execAsync(command, {
+    env: { ...process.env, CUDA_DEVICE_ORDER: 'PCI_BUS_ID' },
+  });
 
-// --- dump 实时性能数据 ---
-async function getDumpStats(id: number) {
-  const { stdout } = await execAsync(
-    `xpu-smi dump -d ${id} -m 0,1,2,3,5,17,18 -n 1`
-  );
+  // Parse CSV output
+  const gpus = stdout
+    .trim()
+    .split('\n')
+    .map(line => {
+      const [
+        index,
+        name,
+        driverVersion,
+        temperature,
+        gpuUtil,
+        memoryUtil,
+        memoryTotal,
+        memoryFree,
+        memoryUsed,
+        powerDraw,
+        powerLimit,
+        clockGraphics,
+        clockMemory,
+      ] = line.split(', ').map(item => item.trim());
 
-  const lines = stdout.trim().split("\n");
-  const csvLine = lines[lines.length - 1]; // 最后一行是数据
+      return {
+        index: parseInt(index),
+        name,
+        driverVersion,
+        temperature: parseInt(temperature),
+        utilization: {
+          gpu: parseInt(gpuUtil),
+          memory: parseInt(memoryUtil),
+        },
+        memory: {
+          total: parseInt(memoryTotal),
+          free: parseInt(memoryFree),
+          used: parseInt(memoryUsed),
+        },
+        power: {
+          draw: parseFloat(powerDraw),
+          limit: parseFloat(powerLimit),
+        },
+        clocks: {
+          graphics: parseInt(clockGraphics),
+          memory: parseInt(clockMemory),
+        },
+      };
+    });
 
-  const fields = csvLine.split(",").map((x) => x.trim());
-
-  const safe = (v: any) =>
-    !v || v.toLowerCase?.() === "n/a" ? 0 : parseFloat(v);
-
-  return {
-    gpuUtil: safe(fields[2]),
-    power: safe(fields[3]),
-    freq: safe(fields[4]),
-    temperature: safe(fields[5]),
-    memUtil: safe(fields[6]),
-    memUsed: safe(fields[8]) || 0, // MiB
-  };
+  return gpus;
 }

@@ -1,0 +1,65 @@
+{
+  "_comment": [
+    "块级汉化词典：用于 ui_i18n/zh-CN.json 覆盖不到的多行 JSX / 多节点文案。",
+    "en 必须与上游源码逐字一致（含缩进），zh 是替换后的内容。",
+    "由 scripts/localize_ui.py 应用（会在应用 ui_i18n/zh-CN.json 之后、对同一批文件再跑一遍），",
+    "幂等：已经汉化过的文件再跑不会重复替换；上游改动导致 en 匹配不上时会在输出里列出来。",
+    "同一条目里可以顺带修上游的小 bug（例如 RamTorch 链接的 target 属性）。"
+  ],
+  "blocks": [
+    {
+      "file": "ui/src/docs.tsx",
+      "note": "层级卸载：标题",
+      "en": "Layer Offloading{' '}",
+      "zh": "层级卸载{' '}"
+    },
+    {
+      "file": "ui/src/docs.tsx",
+      "note": "层级卸载：说明正文（上游是多行 JSX，词典匹配不到）",
+      "en": "        This is an experimental feature based on{' '}\n        <a className=\"text-blue-500\" href=\"https://github.com/lodestone-rock/RamTorch\" target=\"_blank\">\n          RamTorch\n        </a>\n        . This feature is early and will have many updates and changes, so be aware it may not work consistently from\n        one update to the next. It will also only work with certain models.\n        <br />\n        <br />\n        Layer Offloading uses the CPU RAM instead of the GPU ram to hold most of the model weights. This allows training\n        a much larger model on a smaller GPU, assuming you have enough CPU RAM. This is slower than training on pure GPU\n        RAM, but CPU RAM is cheaper and upgradeable. You will still need GPU RAM to hold the optimizer states and LoRA\n        weights, so a larger card is usually still needed.\n        <br />\n        <br />\n        You can also select the percentage of the layers to offload. It is generally best to offload as few as possible\n        (close to 0%) for best performance, but you can offload more if you need the memory.",
+      "zh": "        这是一个基于{' '}\n        <a className=\"text-blue-500\" href=\"https://github.com/lodestone-rock/RamTorch\" target=\"_blank\">\n          RamTorch\n        </a>\n         的实验性功能。它还处于早期阶段，后续会频繁更新与调整，因此不同版本间可能表现不一致，并且只适用于部分模型。\n        <br />\n        <br />\n        层级卸载会使用 CPU 内存来承载模型的大部分权重，而不是占用显存。只要内存足够，就能在小显存的显卡上训练更大的模型。它比纯显存训练慢，但内存更便宜、也更容易升级。优化器状态和 LoRA 权重仍然需要显存，所以显卡通常还是要够大。\n        <br />\n        <br />\n        你也可以选择需要卸载的层数百分比。一般来说，为了性能最好尽量少卸载（接近 0%）；显存不足时再往上调。"
+    },
+    {
+      "file": "ui/src/app/jobs/new/SimpleJob.tsx",
+      "note": "层级卸载：勾选框标签（上游是多节点 JSX，词典匹配不到）",
+      "en": "Layer Offloading <IoFlaskSharp",
+      "zh": "层级卸载 <IoFlaskSharp"
+    },
+    {
+      "file": "ui/src/app/jobs/new/SimpleJob.tsx",
+      "note": "验证（Validation）说明正文",
+      "en": "                <p className=\"text-sm text-gray-400 mb-4\">\n                  Validation runs a stable loss check on a fixed set of images. Each image is encoded once at startup\n                  and predicted at the selected sigmas with fixed seeds, so the result is always deterministic and\n                  comparable across the run. The average loss is logged as val/loss every time validation runs. The\n                  images need to match the concept of your dataset, but{' '}\n                  <span className=\"font-bold text-gray-300\">do not include the validation images in the dataset</span>.\n                  They must be images containing the concept you want to train, but not an image trained on.\n                </p>",
+      "zh": "                <p className=\"text-sm text-gray-400 mb-4\">\n                  验证会用一组固定图片做稳定的 loss 检查：每张图在启动时只编码一次，再用固定随机种子在选定的 sigma 上预测，\n                  因此结果始终一致，可以在整个训练过程中横向比较。每次验证的平均 loss 会记录为 val/loss。\n                  验证图片的内容要与你数据集中的概念一致，但{' '}\n                  <span className=\"font-bold text-gray-300\">不要把验证图放进数据集</span>。\n                  它们应该是包含你想训练的概念、但没有参与训练的图片。\n                </p>"
+    },
+    {
+      "file": "ui/src/app/jobs/new/SimpleJob.tsx",
+      "note": "验证图片数量标签（含 JSX 表达式，词典匹配不到）",
+      "en": "                    Validation Images ({validationConfig.validation_items.length})",
+      "zh": "                    验证图片（{validationConfig.validation_items.length}）"
+    },
+    {
+      "file": "ui/src/app/settings/page.tsx",
+      "note": "设置页：Hugging Face 令牌",
+      "en": "                    Hugging Face Token\n                    <div className=\"text-gray-500 text-sm ml-1\">\n                      Create a Read token on{' '}\n                      <a href=\"https://huggingface.co/settings/tokens\" target=\"_blank\" rel=\"noreferrer\">\n                        {' '}\n                        Huggingface\n                      </a>{' '}\n                      if you need to access gated/private models.",
+      "zh": "                    Hugging Face 令牌\n                    <div className=\"text-gray-500 text-sm ml-1\">\n                      访问受限或私有模型前，请先到{' '}\n                      <a href=\"https://huggingface.co/settings/tokens\" target=\"_blank\" rel=\"noreferrer\">\n                        Huggingface\n                      </a>{' '}\n                      上创建一个 Read 令牌。"
+    },
+    {
+      "file": "ui/src/app/settings/page.tsx",
+      "note": "设置页：训练输出目录",
+      "en": "                    Training Folder Path\n                    <div className=\"text-gray-500 text-sm ml-1\">\n                      We will store your training information here. Must be an absolute path. If blank, it will default\n                      to the output folder in the project root.",
+      "zh": "                    训练输出目录\n                    <div className=\"text-gray-500 text-sm ml-1\">\n                      训练相关的信息都会保存在这里。必须是绝对路径。留空则默认使用项目根目录下的 output 文件夹。"
+    },
+    {
+      "file": "ui/src/app/settings/page.tsx",
+      "note": "设置页：数据集目录（含告警）",
+      "en": "                    Dataset Folder Path\n                    <div className=\"text-gray-500 text-sm ml-1\">\n                      Where we store and find your datasets.{' '}\n                      <span className=\"text-orange-800\">\n                        Warning: This software may modify datasets so it is recommended you keep a backup somewhere else\n                        or have a dedicated folder for this software.\n                      </span>",
+      "zh": "                    数据集目录\n                    <div className=\"text-gray-500 text-sm ml-1\">\n                      数据集的存放与查找位置。{' '}\n                      <span className=\"text-orange-800\">\n                        警告：本软件可能会修改数据集，建议另外保留一份备份，或专门指定一个目录供它使用。\n                      </span>"
+    },
+    {
+      "file": "ui/src/app/settings/page.tsx",
+      "note": "设置页：模型目录",
+      "en": "                    Models Folder Path\n                    <div className=\"text-gray-500 text-sm ml-1\">\n                      Some models support loading ComfyUI model weights directly. Models that do will be loaded\n                      from/downloaded to this path. Must be an absolute path. If blank, it will default to the models\n                      folder in the project root.",
+      "zh": "                    模型目录\n                    <div className=\"text-gray-500 text-sm ml-1\">\n                      部分模型支持直接加载 ComfyUI 的模型权重，这类模型会从这个路径加载或下载到这里。必须是绝对路径。留空则默认使用项目根目录下的 models 文件夹。"
+    }
+  ]
+}

@@ -29,8 +29,9 @@ from torch.utils.checkpoint import checkpoint
 
 
 def rope(pos: Tensor, dim: int, theta: float = 1e4, ntk: float = 1.0) -> Tensor:
-    # XPU has no fp64 support; compute in fp32 there (result is .float() anyway).
-    dtype = torch.float32 if pos.device.type == "xpu" else torch.float64
+    # XPU/MPS have no fp64 support; compute in fp32 there (result is .float() anyway).
+    from toolkit.device_utils import rope_dtype
+    dtype = rope_dtype(pos.device)
     scale = torch.arange(0, dim, 2, dtype=dtype, device=pos.device) / dim
     omega = 1.0 / ((theta * ntk) ** scale)
     out = torch.einsum("...n,d->...nd", pos, omega)

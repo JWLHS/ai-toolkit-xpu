@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     if (!isAllowed) {
       console.warn(`Access denied: ${resolvedFilePath} not in ${allowedDirs.join(', ')}`);
-      return new NextResponse('Access denied', { status: 403 });
+      return new NextResponse('拒绝访问', { status: 403 });
     }
 
     // Check if file exists and grab file info in one stat
@@ -40,10 +40,10 @@ export async function POST(request: NextRequest) {
       stat = await fs.promises.stat(resolvedFilePath);
     } catch {
       console.warn(`File not found: ${resolvedFilePath}`);
-      return new NextResponse('File not found', { status: 404 });
+      return new NextResponse('文件不存在', { status: 404 });
     }
     if (!stat.isFile()) {
-      return new NextResponse('Not a file', { status: 400 });
+      return new NextResponse('不是文件', { status: 400 });
     }
 
     await fs.promises.unlink(resolvedFilePath);
@@ -51,6 +51,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting file:', error);
-    return new NextResponse('Internal Server Error', { status: 500 });
+    return new NextResponse('服务器内部错误', { status: 500 });
   }
 }

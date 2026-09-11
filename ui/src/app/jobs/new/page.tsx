@@ -1,22 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { defaultJobConfig, defaultDatasetConfig, migrateJobConfig } from './jobConfig';
 import { jobTypeOptions } from './options';
 import { JobConfig } from '@/types';
 import { objectCopy } from '@/utils/basic';
-import { useNestedState } from '@/utils/hooks';
+import { useNestedState, setNestedValue } from '@/utils/hooks';
 import { SelectInput } from '@/components/formInputs';
 import useSettings from '@/hooks/useSettings';
 import useGPUInfo from '@/hooks/useGPUInfo';
 import useDatasetList from '@/hooks/useDatasetList';
+import YAML from 'yaml';
 import path from 'path';
 import { TopBar, MainContent } from '@/components/layout';
 import { Button } from '@headlessui/react';
 import { FaChevronLeft } from 'react-icons/fa';
 import SimpleJob from './SimpleJob';
-import AdvancedJob from './AdvancedJob';
+import AdvancedConfigEditor from '@/components/AdvancedConfigEditor';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { apiClient } from '@/utils/api';
 
@@ -34,8 +35,51 @@ export default function TrainingForm() {
   const [datasetOptions, setDatasetOptions] = useState<{ value: string; label: string }[]>([]);
   const [showAdvancedView, setShowAdvancedView] = useState(false);
 
-  const [jobConfig, setJobConfig] = useNestedState<JobConfig>(objectCopy(defaultJobConfig));
+  const [jobConfig, setJobConfig] = useNestedState<JobConfig>(objectCopy(migrateJobConfig(defaultJobConfig)));
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportConfig = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = reader.result as string;
+        let parsed: any;
+        if (file.name.endsWith('.json') || file.name.endsWith('.jsonc')) {
+          parsed = JSON.parse(text.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, ''));
+        } else {
+          parsed = YAML.parse(text);
+        }
+
+        // Set required fields (same pattern as AdvancedJob.handleChange)
+        try {
+          parsed.config.process[0].sqlite_db_path = './aitk_db.db';
+          parsed.config.process[0].training_folder = settings.TRAINING_FOLDER;
+          parsed.config.process[0].device = 'cuda';
+          parsed.config.process[0].performance_log_every = 10;
+        } catch (err) {
+          console.warn('Could not set required fields on imported config:', err);
+        }
+
+        migrateJobConfig(parsed);
+        setJobConfig(parsed);
+      } catch (err) {
+        console.error('Failed to parse config file:', err);
+        alert('解析配置文件失败，请检查文件格式。');
+      }
+    };
+    reader.readAsText(file);
+
+    // Reset so the same file can be re-imported
+    e.target.value = '';
+  };
 
   useEffect(() => {
     if (!isSettingsLoaded) return;
@@ -43,15 +87,19 @@ export default function TrainingForm() {
 
     const datasetOptions = datasets.map(name => ({ value: path.join(settings.DATASETS_FOLDER, name), label: name }));
     setDatasetOptions(datasetOptions);
-    const defaultDatasetPath = defaultDatasetConfig.folder_path;
 
-    for (let i = 0; i < jobConfig.config.process[0].datasets.length; i++) {
-      const dataset = jobConfig.config.process[0].datasets[i];
-      if (dataset.folder_path === defaultDatasetPath) {
-        if (datasetOptions.length > 0) {
-          setJobConfig(datasetOptions[0].value, `config.process[0].datasets[${i}].folder_path`);
+    if (datasetOptions.length > 0) {
+      const defaultDatasetPath = defaultDatasetConfig.folder_path;
+      // Use functional updater so we check the *current* state, not a stale closure
+      setJobConfig((prev: JobConfig) => {
+        let updated = prev;
+        for (let i = 0; i < prev.config.process[0].datasets.length; i++) {
+          if (prev.config.process[0].datasets[i].folder_path === defaultDatasetPath) {
+            updated = setNestedValue(updated, datasetOptions[0].value, `config.process[0].datasets[${i}].folder_path`);
+          }
         }
-      }
+        return updated;
+      });
     }
   }, [datasets, settings, isSettingsLoaded, datasetFetchStatus]);
 
@@ -62,7 +110,7 @@ export default function TrainingForm() {
         .get(`/api/jobs?id=${cloneId}`)
         .then(res => res.data)
         .then(data => {
-          console.log('Clone Training:', data);
+          console.log('复制训练：', data);
           setGpuIDs(data.gpu_ids);
           const newJobConfig = migrateJobConfig(JSON.parse(data.job_config));
           newJobConfig.config.name = `${newJobConfig.config.name}_copy`;
@@ -121,9 +169,9 @@ export default function TrainingForm() {
       })
       .catch(error => {
         if (error.response?.status === 409) {
-          alert('Training name already exists. Please choose a different name.');
+          alert('训练名称已存在，请换一个。');
         } else {
-          alert('Failed to save job. Please try again.');
+          alert('保存任务失败，请重试。');
         }
         console.log('Error saving training:', error);
       })
@@ -142,37 +190,39 @@ export default function TrainingForm() {
   return (
     <>
       <TopBar>
-        <div>
-          <Button className="text-gray-500 dark:text-gray-300 px-3 mt-1" onClick={() => history.back()}>
+        <div className="flex-shrink-0">
+          <Button className="text-gray-500 dark:text-gray-300 px-2 sm:px-3 mt-1" onClick={() => history.back()}>
             <FaChevronLeft />
           </Button>
         </div>
-        <div>
-          {/* 标题在移动端缩小并截断，避免溢出 */}
-          <h1 className="text-base sm:text-lg truncate max-w-[50vw] sm:max-w-none">
+        <div className="flex-shrink-0">
+          <h1 className="text-base sm:text-lg truncate max-w-[120px] sm:max-w-none">
             {runId ? '编辑训练任务' : '新建训练任务'}
           </h1>
         </div>
         <div className="flex-1"></div>
         {showAdvancedView && (
           <>
-            {/* GPU 选择器：移动端隐藏，避免顶栏拥挤 */}
-            <div className="hidden md:block">
+            <div className="hidden sm:block">
               <SelectInput
                 value={`${gpuIDs}`}
                 onChange={value => setGpuIDs(value)}
                 options={gpuList.map((gpu: any) => ({ value: `${gpu.index}`, label: `GPU #${gpu.index}` }))}
               />
             </div>
+            <div className="hidden sm:block mx-4 bg-gray-200 dark:bg-gray-800 w-1 h-6"></div>
+            <div className="hidden md:block">
+              <Button className="text-gray-200 bg-gray-800 px-3 py-1 rounded-md" onClick={handleImportConfig}>
+                导入配置
+              </Button>
+            </div>
             <div className="hidden md:block mx-4 bg-gray-200 dark:bg-gray-800 w-1 h-6"></div>
           </>
         )}
         {!showAdvancedView && (
           <>
-            {/* 任务类型选择：保持手机端显示，但进一步收窄宽度避免顶栏拥挤 */}
-            <div className="block">
+            <div className="hidden sm:block">
               <SelectInput
-                className="w-[120px] sm:w-[200px] min-w-[100px]"
                 value={`${jobConfig?.config.process[0].type}`}
                 onChange={value => {
                   // undo current job type changes
@@ -198,44 +248,61 @@ export default function TrainingForm() {
                 options={jobTypeOptions}
               />
             </div>
-            <div className="mx-4 bg-gray-200 dark:bg-gray-800 w-1 h-6 hidden sm:block"></div>
+            <div className="hidden sm:block mx-4 bg-gray-200 dark:bg-gray-800 w-1 h-6"></div>
           </>
         )}
 
-        <div className="pr-2">
+        <div className="pr-1 sm:pr-2 flex-shrink-0">
           <Button
-            // 切换视图按钮：移动端缩小字号与内边距并保持不换行
-            className="text-gray-200 bg-gray-800 text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-md whitespace-nowrap"
+            className="text-gray-200 bg-gray-800 px-2 sm:px-3 py-1 rounded-md text-xs sm:text-base"
             onClick={() => setShowAdvancedView(!showAdvancedView)}
           >
-            {showAdvancedView ? '显示简易视图' : '显示高级视图'}
+            <span className="sm:hidden">{showAdvancedView ? '简单' : '高级设置'}</span>
+            <span className="hidden sm:inline">{showAdvancedView ? '显示简单视图' : '显示高级视图'}</span>
           </Button>
         </div>
-        <div>
+        <div className="flex-shrink-0">
           <Button
-            // 保存/创建按钮：同样缩小移动端尺寸并保持不换行
-            className="text-gray-200 bg-green-800 text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-md whitespace-nowrap"
+            className="text-white bg-green-600 hover:bg-green-700 px-2 sm:px-3 py-1 rounded-md text-xs sm:text-base"
             onClick={() => saveJob()}
             disabled={status === 'saving'}
           >
-            {status === 'saving' ? '保存中...' : runId ? '更新任务' : '创建任务'}
+            {status === 'saving' ? (
+              '保存中...'
+            ) : (
+              <>
+                <span className="sm:hidden">{runId ? 'Update' : '创建'}</span>
+                <span className="hidden sm:inline">{runId ? '更新任务' : '创建任务'}</span>
+              </>
+            )}
           </Button>
         </div>
       </TopBar>
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".yaml,.yml,.json,.jsonc"
+        style={{ display: 'none' }}
+        onChange={handleFileSelected}
+      />
+
       {showAdvancedView ? (
         <div className="pt-[48px] absolute top-0 left-0 w-full h-full overflow-auto">
-          <AdvancedJob
-            jobConfig={jobConfig}
-            setJobConfig={setJobConfig}
-            status={status}
-            handleSubmit={handleSubmit}
-            runId={runId}
-            gpuIDs={gpuIDs}
-            setGpuIDs={setGpuIDs}
-            gpuList={gpuList}
-            datasetOptions={datasetOptions}
-            settings={settings}
+          <AdvancedConfigEditor
+            config={jobConfig}
+            setConfig={setJobConfig}
+            transformOnParse={(parsed: any) => {
+              try {
+                parsed.config.process[0].sqlite_db_path = './aitk_db.db';
+                parsed.config.process[0].training_folder = settings.TRAINING_FOLDER;
+                parsed.config.process[0].device = 'cuda';
+                parsed.config.process[0].performance_log_every = 10;
+              } catch (e) {
+                console.warn(e);
+              }
+              return migrateJobConfig(parsed);
+            }}
           />
         </div>
       ) : (
@@ -243,7 +310,7 @@ export default function TrainingForm() {
           <ErrorBoundary
             fallback={
               <div className="flex items-center justify-center h-64 text-lg text-red-600 font-medium bg-red-100 dark:bg-red-900/20 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg">
-                检测到高级任务，请切换到高级视图继续。
+                检测到高级任务配置，请切换到高级视图继续。
               </div>
             }
           >
@@ -257,6 +324,7 @@ export default function TrainingForm() {
               setGpuIDs={setGpuIDs}
               gpuList={gpuList}
               datasetOptions={datasetOptions}
+              isLoading={!isSettingsLoaded || !isGPUInfoLoaded || datasetFetchStatus !== 'success'}
             />
           </ErrorBoundary>
 

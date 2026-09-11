@@ -192,6 +192,7 @@ aitk_db.db-shm
 .claude
 original_repo
 .next
+*.tsbuildinfo
 
 # ---- XPU 本地环境（不进仓库）----
 /python/

@@ -1,0 +1,4 @@
+# Windows 批处理必须是 CRLF，否则 cmd 会在 goto/label 上解析错乱。
+# 仓库内统一存 LF，但这两位在检出和 zip 下载时都还原成 CRLF。
+*.bat text eol=crlf
+*.cmd text eol=crlf

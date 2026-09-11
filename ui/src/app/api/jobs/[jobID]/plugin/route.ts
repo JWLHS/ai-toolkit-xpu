@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, { params }: { params: { jobID: s
   });
 
   if (!job) {
-    return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    return NextResponse.json({ error: '任务不存在' }, { status: 404 });
   }
 
   const trainingFolder = await getTrainingFolder();

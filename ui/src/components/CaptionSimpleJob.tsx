@@ -4,12 +4,14 @@ import {
   CreatableSelectInput,
   FormGroup,
   SelectInput,
+  SliderInput,
   TextAreaInput,
   TextInput,
 } from '@/components/formInputs';
 import { CaptionJobConfig } from '@/types';
 import { handleCaptionerTypeChange } from '@/helpers/captionJobConfig';
 import {
+  batchSizeOptions,
   captionerTypes,
   defaultQtype,
   groupedCaptionerTypes,
@@ -30,6 +32,8 @@ type Props = {
 const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, setGpuIDs, gpuList, showGPUSelect }) => {
   const selectedCaptionOption = captionerTypes.find(option => option.name === jobConfig.config.process[0].type);
   const additionalSections = selectedCaptionOption?.additionalSections || [];
+  const captionPrompts = selectedCaptionOption?.captionPrompts || {};
+  const promptPresetNames = Object.keys(captionPrompts);
   const minNewTokens = selectedCaptionOption?.minNewTokens ?? 0;
   const newTokensOptions = maxNewTokensOptions.filter(option => parseInt(option.value) >= minNewTokens);
 
@@ -38,7 +42,7 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <div>
           <SelectInput
-            label="Captioner Type"
+            label="标注器类型"
             value={jobConfig.config.process[0].type}
             onChange={value => {
               handleCaptionerTypeChange(jobConfig.config.process[0].type, value, jobConfig, setJobConfig);
@@ -49,7 +53,7 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
         {showGPUSelect && (
           <div>
             <SelectInput
-              label="GPU ID"
+              label="GPU 编号"
               value={`${gpuIDs}`}
               onChange={value => setGpuIDs(value)}
               options={gpuList.map((gpu: any) => ({ value: `${gpu.index}`, label: `GPU #${gpu.index}` }))}
@@ -59,7 +63,7 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
       </div>
       <div className="mt-4">
         <CreatableSelectInput
-          label="Name or Path"
+          label="名称或路径"
           value={jobConfig.config.process[0].caption.model_name_or_path}
           docKey="config.process[0].caption.model_name_or_path"
           onChange={(value: string | null) => {
@@ -76,7 +80,7 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
       {additionalSections.includes('caption.model_name_or_path2') && (
         <div className="mt-4">
           <CreatableSelectInput
-            label="Name or Path 2"
+            label="名称或路径 2"
             value={jobConfig.config.process[0].caption.model_name_or_path2 || ''}
             onChange={(value: string | null) => {
               if (value?.trim() === '') {
@@ -92,7 +96,7 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
       {additionalSections.includes('caption.fixed_caption') && (
         <div className="mt-4">
           <TextInput
-            label="Fixed Caption"
+            label="固定标注"
             value={jobConfig.config.process[0].caption.fixed_caption || ''}
             onChange={value => {
               if (value?.trim() === '') {
@@ -101,14 +105,14 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
               }
               setJobConfig(value, 'config.process[0].caption.fixed_caption');
             }}
-            placeholder="Enter fixed caption (if you want the same caption for all audio files)"
+            placeholder="输入固定标注（若所有音频共用同一条标注）"
           />
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <div>
           <SelectInput
-            label="Quantize"
+            label="量化"
             value={jobConfig.config.process[0].caption.quantize ? jobConfig.config.process[0].caption.qtype : ''}
             onChange={value => {
               if (value === '') {
@@ -123,7 +127,7 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
           />
           <div className="mt-4">
             <CreatableSelectInput
-              label="Caption Extension"
+              label="标注扩展名"
               value={jobConfig.config.process[0].caption.caption_extension || 'txt'}
               onChange={value => {
                 setJobConfig(value, 'config.process[0].caption.caption_extension');
@@ -138,7 +142,7 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
           {additionalSections.includes('caption.max_res') && (
             <div className="mt-4">
               <SelectInput
-                label="Max Resolution"
+                label="最大分辨率"
                 value={`${jobConfig.config.process[0].caption.max_res || ''}`}
                 onChange={value => {
                   const intVal = parseInt(value);
@@ -153,7 +157,7 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
           {additionalSections.includes('caption.max_new_tokens') && (
             <div className="mt-4">
               <SelectInput
-                label="Max New Tokens"
+                label="最大新 token 数"
                 value={`${jobConfig.config.process[0].caption.max_new_tokens || ''}`}
                 onChange={value => {
                   const intVal = parseInt(value);
@@ -165,43 +169,102 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
               />
             </div>
           )}
+          {additionalSections.includes('caption.batch_size') && (
+            <div className="mt-4">
+              <SelectInput
+                label="批大小"
+                value={`${jobConfig.config.process[0].caption.batch_size || ''}`}
+                onChange={value => {
+                  const intVal = parseInt(value);
+                  if (!isNaN(intVal)) {
+                    setJobConfig(intVal, 'config.process[0].caption.batch_size');
+                  }
+                }}
+                options={batchSizeOptions}
+              />
+            </div>
+          )}
         </div>
         <div>
-          <FormGroup label="Options">
+          <FormGroup label="选项">
             <Checkbox
-              label="Low VRAM"
+              label="低显存"
               checked={jobConfig.config.process[0].caption.low_vram}
               onChange={value => setJobConfig(value, 'config.process[0].caption.low_vram')}
             />
             <Checkbox
-              label="Recaption"
+              label="重新打标"
               checked={jobConfig.config.process[0].caption.recaption}
               onChange={value => setJobConfig(value, 'config.process[0].caption.recaption')}
             />
             <Checkbox
-              label="Compile Models"
+              label="编译模型"
               checked={jobConfig.config.process[0].caption.compile || false}
               onChange={value => setJobConfig(value, 'config.process[0].caption.compile')}
             />
             {additionalSections.includes('caption.thinking') && (
               <Checkbox
-                label="Thinking"
+                label="思考"
                 checked={jobConfig.config.process[0].caption.thinking || false}
                 onChange={value => setJobConfig(value, 'config.process[0].caption.thinking')}
               />
+            )}
+            {additionalSections.includes('caption.layer_offloading') && (
+              <>
+                <Checkbox
+                  label="层级卸载"
+                  checked={jobConfig.config.process[0].caption.layer_offloading || false}
+                  onChange={value => setJobConfig(value, 'config.process[0].caption.layer_offloading')}
+                />
+                {jobConfig.config.process[0].caption.layer_offloading && (
+                  <div className="pt-2">
+                    <SliderInput
+                      label="卸载比例 %"
+                      value={Math.round((jobConfig.config.process[0].caption.layer_offloading_percent ?? 1) * 100)}
+                      onChange={value =>
+                        setJobConfig(value * 0.01, 'config.process[0].caption.layer_offloading_percent')
+                      }
+                      min={0}
+                      max={100}
+                      step={1}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </FormGroup>
         </div>
       </div>
       {additionalSections.includes('caption.caption_prompt') && (
         <div className="mt-4">
+          {promptPresetNames.length > 1 && (
+            <div className="mb-4">
+              <SelectInput
+                label="提示词预设"
+                value={
+                  promptPresetNames.find(
+                    name => captionPrompts[name] === jobConfig.config.process[0].caption.caption_prompt,
+                  ) || ''
+                }
+                onChange={value => {
+                  if (captionPrompts[value] !== undefined) {
+                    setJobConfig(captionPrompts[value], 'config.process[0].caption.caption_prompt');
+                  }
+                }}
+                options={[
+                  { value: '', label: '- Custom -' },
+                  ...promptPresetNames.map(name => ({ value: name, label: name })),
+                ]}
+              />
+            </div>
+          )}
           <TextAreaInput
-            label="Caption Prompt"
+            label="标注提示词"
             value={jobConfig.config.process[0].caption.caption_prompt || ''}
             onChange={value => {
               setJobConfig(value, 'config.process[0].caption.caption_prompt');
             }}
-            placeholder="Enter caption prompt"
+            placeholder="输入标注提示词"
           />
         </div>
       )}

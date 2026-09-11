@@ -96,8 +96,14 @@ class MemoryManager:
         for im in ignore_modules:
             module._memory_manager.unmanaged_modules.append(im)
 
-        # count ignore modules as processed
+        # count ignore modules as processed — including their whole subtree: an
+        # ignored module stays resident, so none of its children may get a
+        # layer manager (a managed child would pin its weight back to cpu
+        # behind the parent's back)
         modules_processed = [x for x in ignore_modules]
+        for im in ignore_modules:
+            if isinstance(im, torch.nn.Module):
+                modules_processed.extend(im.modules())
         # attach to all modules
         for name, sub_module in module.named_modules():
             for child_name, child_module in sub_module.named_modules():

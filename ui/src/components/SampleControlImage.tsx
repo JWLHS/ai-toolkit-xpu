@@ -5,7 +5,11 @@ import classNames from 'classnames';
 import { useDropzone } from 'react-dropzone';
 import { FaUpload, FaImage, FaTimes } from 'react-icons/fa';
 import { apiClient } from '@/utils/api';
+import { encodeFilePathForUrl } from '@/utils/basic';
 import type { AxiosProgressEvent } from 'axios';
+
+const VIDEO_EXTS = ['.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v', '.wmv', '.flv'];
+const isVideoPath = (p: string) => VIDEO_EXTS.some(ext => p.toLowerCase().endsWith(ext));
 
 interface Props {
   src: string | null | undefined;
@@ -17,7 +21,7 @@ interface Props {
 export default function SampleControlImage({
   src,
   className,
-  instruction = 'Add Control Image',
+  instruction = '添加控制图',
   onNewImageSelected,
 }: Props) {
   const [isUploading, setIsUploading] = useState(false);
@@ -27,7 +31,8 @@ export default function SampleControlImage({
 
   const backgroundUrl = useMemo(() => {
     if (localPreview) return localPreview;
-    if (src) return `/api/img/${encodeURIComponent(src)}`;
+    // videos preview as a server-generated thumbnail
+    if (src) return `/api/img/${encodeFilePathForUrl(src)}${isVideoPath(src) ? '?thumb=1' : ''}`;
     return null;
   }, [src, localPreview]);
 
@@ -37,8 +42,10 @@ export default function SampleControlImage({
       setIsUploading(true);
       setUploadProgress(0);
 
-      const objectUrl = URL.createObjectURL(file);
-      setLocalPreview(objectUrl);
+      // an object URL only works as a background preview for images; video
+      // previews come from the server thumbnail after the upload lands
+      const objectUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+      if (objectUrl) setLocalPreview(objectUrl);
 
       const formData = new FormData();
       formData.append('files', file);
@@ -62,7 +69,7 @@ export default function SampleControlImage({
       } finally {
         setIsUploading(false);
         setUploadProgress(0);
-        URL.revokeObjectURL(objectUrl);
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     },
@@ -94,7 +101,10 @@ export default function SampleControlImage({
   // Drag & drop only; click handled via our own hidden input
   const { getRootProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'] },
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'],
+      'video/*': VIDEO_EXTS,
+    },
     multiple: false,
     noClick: true,
     noKeyboard: true,
@@ -128,7 +138,7 @@ export default function SampleControlImage({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         className="hidden"
         onChange={e => {
           const file = e.currentTarget.files?.[0];
@@ -165,7 +175,7 @@ export default function SampleControlImage({
               )}
             >
               <FaUpload className="text-[10px]" />
-              <span>Replace</span>
+              <span>替换</span>
             </div>
           </div>
 
@@ -173,8 +183,8 @@ export default function SampleControlImage({
           <button
             type="button"
             onClick={clearImage}
-            title="Clear image"
-            aria-label="Clear image"
+            title="清除图片"
+            aria-label="清除图片"
             className={classNames(
               'absolute right-1.5 top-1.5 z-10 inline-flex items-center justify-center',
               'h-5 w-5 rounded-md bg-black/55 text-white/90',
