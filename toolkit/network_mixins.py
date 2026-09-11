@@ -31,6 +31,8 @@ LINEAR_MODULES = [
     'LoRACompatibleLinear',
     'QLinear',
     'OstrisLinear',
+    'OmniInt8Linear',
+    'OmniFp8Linear',
     # 'GroupNorm',
 ]
 CONV_MODULES = [

@@ -15,6 +15,8 @@ LINEAR_MODULES = [
     'Linear',
     'OstrisLinear',
     'LoRACompatibleLinear',
+    'OmniInt8Linear',
+    'OmniFp8Linear',
 ]
 CONV_MODULES = [
     'Conv2d',

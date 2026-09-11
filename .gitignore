@@ -20,6 +20,10 @@ parts/
 sdist/
 var/
 wheels/
+# 例外：本 fork 预置的可选加速轮子要进仓库（用户手动安装）
+!wheels/
+!wheels/*.whl
+!wheels/README.md
 share/python-wheels/
 *.egg-info/
 .installed.cfg

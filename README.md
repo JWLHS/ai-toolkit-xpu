@@ -101,6 +101,28 @@ run_xpu.bat
 | 关键依赖 | torch `2.13.0+xpu`、torchao `0.17.0+xpu`、triton-xpu `3.7.2` |
 | Python | `>=3.11,<3.14`，`.python-version` 默认钉 `3.13` |
 
+## 可选：XPU int8 加速后端（需手动安装，按显卡架构选）
+
+仓库 `wheels/` 下带两个**可选**的加速轮子（`omni_xpu_kernel`），装上之后
+Web UI 的「量化」下拉里会多出 `xpu_int8` / `xpu_fp8` 两个选项；**不装也完全不影响**
+（默认照旧走 torchao int8）。
+
+| 你的显卡 | 装哪个 |
+| --- | --- |
+| Intel Arc **A 系列**（A770/A750/A580/A380） | `wheels/omni_xpu_kernel-0.2.0b1+torch213.dg2-cp313-*.whl` |
+| Intel Arc **B 系列**（B580/B570 等） | `wheels/omni_xpu_kernel-0.2.0b2+torch213.bmg-cp313-*.whl` |
+
+```bat
+:: 按你的架构二选一（必须 Python 3.13 + torch 2.13，仓库默认就是）
+.venv\Scripts\python.exe -m pip install --no-deps wheels\omni_xpu_kernel-<架构>-cp313-cp313-win_amd64.whl
+```
+
+**回退**：在 UI 里选了 `xpu_int8` 但没装轮子/装错架构/版本不符时，会自动回退到
+torchao int8 并在日志里给出原因，训练不会失败。
+
+**不需要任何环境变量**，也不需要装 oneAPI。细节（含实测数据）见
+[wheels/README.md](wheels/README.md)。
+
 版本号沿用上游基线的原因是这个 fork 是"跟着上游走"的改造版：改动越少越容易跟上
 官方更新，`+xpu` 只用于区分"这是改造版"。
 

@@ -432,6 +432,11 @@ class StableDiffusion:
                 print_acc("Quantizing transformer")
                 quantize(transformer, weights=quantization_type)
                 freeze(transformer)
+                try:
+                    from toolkit.util import omni_int8 as _omni_mem
+                    _omni_mem.release_process_memory('transformer 量化后')
+                except Exception:
+                    pass
                 transformer.to(self.device_torch)
             else:
                 transformer.to(self.device_torch, dtype=dtype)
@@ -808,7 +813,16 @@ class StableDiffusion:
                 quantization_type = get_qtype(self.model_config.qtype)
                 self.print_and_status_update("Quantizing transformer")
                 quantize(transformer, weights=quantization_type, **self.model_config.quantize_kwargs)
+                if os.environ.get('AI_TOOLKIT_MEM_DEBUG') == '1':
+                    print('MEMDBG: env seen, dumping after transformer quantize', flush=True)
+                    from toolkit.util import omni_int8 as _omni_dbg
+                    _omni_dbg.debug_memory_report('量化transformer后')
                 freeze(transformer)
+                try:
+                    from toolkit.util import omni_int8 as _omni_mem
+                    _omni_mem.release_process_memory('transformer 量化后')
+                except Exception:
+                    pass
                 transformer.to(self.device_torch)
             else:
                 transformer.to(self.device_torch, dtype=dtype)
@@ -915,7 +929,16 @@ class StableDiffusion:
                 quantization_type = get_qtype(self.model_config.qtype)
                 self.print_and_status_update("Quantizing transformer")
                 quantize(transformer, weights=quantization_type, **self.model_config.quantize_kwargs)
+                if os.environ.get('AI_TOOLKIT_MEM_DEBUG') == '1':
+                    print('MEMDBG: env seen, dumping after transformer quantize', flush=True)
+                    from toolkit.util import omni_int8 as _omni_dbg
+                    _omni_dbg.debug_memory_report('量化transformer后')
                 freeze(transformer)
+                try:
+                    from toolkit.util import omni_int8 as _omni_mem
+                    _omni_mem.release_process_memory('transformer 量化后')
+                except Exception:
+                    pass
                 transformer.to(self.device_torch)
             else:
                 transformer.to(self.device_torch, dtype=dtype)

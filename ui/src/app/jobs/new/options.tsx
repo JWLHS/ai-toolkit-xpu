@@ -1719,6 +1719,10 @@ export const groupedModelOptions: GroupedSelectOption[] = modelArchs.reduce((acc
 
 export const quantizationOptions: SelectOption[] = [
   { value: '', label: '- NONE -' },
+  // XPU 专用加速后端（可选装 wheels/ 里的 omni_xpu_kernel 轮子）：
+  // 装了才真正启用，没装/装错架构会自动回退到 torchao int8（见 wheels/README.md）
+  { value: 'xpu_int8', label: 'xpu_int8（Intel XPU int8 加速）' },
+  { value: 'xpu_fp8', label: 'xpu_fp8（Intel XPU fp8·实验）' },
   { value: 'qfloat8', label: 'qfloat8 (default)' },
   { value: 'float8', label: 'float8' },
   { value: 'convrot8', label: '8bit convrot' },

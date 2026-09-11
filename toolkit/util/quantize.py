@@ -21,6 +21,8 @@ from toolkit.util.ostris_quant import (
     convert_linear_to_ostris,
     get_ostris_quantizer,
 )
+from toolkit.util import omni_int8
+from toolkit.util.omni_int8 import OmniFp8Linear, OmniInt8Linear
 import os
 
 if TYPE_CHECKING:
@@ -62,10 +64,48 @@ class ostristype:
         self.quantizer = quantizer
 
 
+class omnitype:
+    """XPU 专用后端（omni_xpu_kernel）。qtype: "xpu_int8" / "xpu_fp8"。
+
+    这是可选后端：wheel 缺失 / 架构不匹配 / torch 版本不匹配时，
+    get_qtype() 会退回 torchao int8，并在日志里给出一行原因。
+    """
+
+    def __init__(self, name: str = "xpu_int8", flavor: str = "int8"):
+        self.name = name
+        self.flavor = flavor
+
+
 def get_qtype(qtype: Union[str, qtype]) -> qtype:
     if qtype in torchao_qtypes:
         return aotype(qtype)
     if isinstance(qtype, str):
+        if qtype == "xpu_int8":
+            if omni_int8.enabled_by_env() and omni_int8.available():
+                info = omni_int8.probe()[2]
+                omni_int8.log_once(
+                    "enabled",
+                    f"[XPU Int8] 使用 omni_xpu_kernel {info.get('version')} "
+                    f"(target={info.get('target')}, torch {info.get('build_torch')})",
+                )
+                return omnitype()
+            reason = "已被 AI_TOOLKIT_XPU_INT8 关闭" if not omni_int8.enabled_by_env() else omni_int8.unavailable_reason()
+            omni_int8.log_once("fallback", f"[XPU Int8] 回退到 torchao int8：{reason}")
+            return aotype("int8")
+        if qtype == "xpu_fp8":
+            if omni_int8.enabled_by_env() and omni_int8.fp8_supported():
+                info = omni_int8.probe()[2]
+                omni_int8.log_once(
+                    "fp8-enabled",
+                    f"[XPU FP8] 使用 omni_xpu_kernel W8A16 {info.get('version')} "
+                    f"(target={info.get('target')})，形状不合格的层自动回退 bf16",
+                )
+                return omnitype("xpu_fp8", flavor="fp8")
+            reason = "已被 AI_TOOLKIT_XPU_INT8 关闭" if not omni_int8.enabled_by_env() else (
+                omni_int8.unavailable_reason() or "该 wheel 没有 onednn_w8a16_fp8"
+            )
+            omni_int8.log_once("fp8-fallback", f"[XPU FP8] 回退到 torchao int8：{reason}")
+            return aotype("int8")
         ostris_quantizer = get_ostris_quantizer(qtype)
         if ostris_quantizer is not None:
             return ostristype(qtype, ostris_quantizer)
@@ -82,6 +122,8 @@ def is_quantized_tensor(t) -> bool:
     # requantize_module_weight, and the lazy OstrisLazyWeight emitted by state_dict()
     # (holds no data; .dequantize() materializes) so save loops dequantize it per key.
     if getattr(t, '_is_ostris_weight', False):
+        return True
+    if getattr(t, '_is_omni_weight', False):
         return True
     return 'torchao' in type(t).__module__ and hasattr(t, 'dequantize')
 
@@ -112,6 +154,13 @@ def requantize_module_weight(module, fp_weight, orig_dtype, config) -> None:
     merge/reset method). If config is None the weight is left in full precision."""
     if isinstance(module, OstrisLinear):
         # the module's backend reuses its existing quantization state; config is not needed
+        module.requantize_(fp_weight)
+        return
+    if isinstance(module, OmniInt8Linear):
+        # same idea for the XPU int8 backend: it re-quantizes into its own buffers
+        module.requantize_(fp_weight)
+        return
+    if isinstance(module, OmniFp8Linear):
         module.requantize_(fp_weight)
         return
     if isinstance(config, ostristype):
@@ -213,6 +262,17 @@ def quantize(
                 if isinstance(weights, ostristype):
                     if isinstance(m, torch.nn.Linear):
                         convert_linear_to_ostris(m, weights.quantizer)
+                elif isinstance(weights, omnitype):
+                    # XPU 专用后端：整层替换成 OmniInt8Linear / OmniFp8Linear
+                    if isinstance(m, torch.nn.Linear):
+                        if weights.flavor == "fp8":
+                            converted = omni_int8.convert_linear_to_omni_fp8(model, name, m)
+                        else:
+                            converted = omni_int8.convert_linear_to_omni(model, name, m)
+                        if not converted and weights.flavor != "fp8":
+                            omni_int8.log_once(
+                                "convert-skip", "[XPU Int8] 有线性层无法转换，已跳过（保持原精度）"
+                            )
                 elif isinstance(weights, aotype):
                     torchao_quantize_(m, weights.config)
                 else:
@@ -231,6 +291,13 @@ def quantize(
         except Exception as e:
             print(f"Failed to quantize {name}: {e}")
             # raise e
+
+    # AI_TOOLKIT_MEM_DEBUG=1 时，量化结束后打印大张量分布与持有者（定位内存问题）
+    if os.environ.get("AI_TOOLKIT_MEM_DEBUG") == "1":
+        omni_int8.debug_memory_report("量化后")
+    # 量化完把被分配器"吃住不放"的内存还给系统（Windows 不会自己还）；
+    # 每次调用都做，代价是几毫秒，最后一次即模型量化结束后那次。
+    omni_int8.release_process_memory("量化后")
 
 
 def _has_quantizable_linear(module: torch.nn.Module, weights, exclude=None) -> bool:

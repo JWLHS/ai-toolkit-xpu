@@ -15,6 +15,10 @@ LINEAR_MODULES = [
     "LoRACompatibleLinear",
     "QLinear",
     'OstrisLinear',
+    # omni_xpu_kernel 的 XPU int8/fp8 层：量化数据同样放在 buffer 里，
+    # 不登记就会被当作"非目标模块"跳过 —— 权重根本不参与卸载（实测多占 4.2GB 显存）。
+    "OmniInt8Linear",
+    "OmniFp8Linear",
 ]
 CONV_MODULES = [
     "Conv2d",
@@ -121,7 +125,11 @@ class MemoryManager:
                     else:
                         # linear; OstrisLinear bounces its quantized buffers instead
                         # of a dequantized weight (module.weight is a property)
-                        if getattr(child_module, "is_ostris_quantized", False):
+                        if getattr(child_module, "is_ostris_quantized", False) or getattr(
+                            child_module, "is_omni_quantized", False
+                        ):
+                            # 两者的共同点：module.weight 是 property，真正的权重在 buffer 里，
+                            # 所以要走"搬 buffer"的管理器，而不是搬 dequantized 权重。
                             OstrisLinearLayerMemoryManager.attach(
                                 child_module, module._memory_manager
                             )
