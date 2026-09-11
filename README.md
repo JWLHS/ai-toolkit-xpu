@@ -103,18 +103,20 @@ run_xpu.bat
 
 ## 可选：XPU int8 加速后端（需手动安装，按显卡架构选）
 
-仓库 `wheels/` 下带两个**可选**的加速轮子（`omni_xpu_kernel`），装上之后
+从 **[Releases](https://github.com/JWLHS/ai-toolkit-xpu/releases/tag/omni-wheels-0.2.0)**
+下载**可选**的加速轮子（`omni_xpu_kernel`），装上之后
 Web UI 的「量化」下拉里会多出 `xpu_int8` / `xpu_fp8` 两个选项；**不装也完全不影响**
 （默认照旧走 torchao int8）。
 
-| 你的显卡 | 装哪个 |
+| 你的显卡 | 下载哪个（Release 附件） |
 | --- | --- |
-| Intel Arc **A 系列**（A770/A750/A580/A380） | `wheels/omni_xpu_kernel-0.2.0b1+torch213.dg2-cp313-*.whl` |
-| Intel Arc **B 系列**（B580/B570 等） | `wheels/omni_xpu_kernel-0.2.0b2+torch213.bmg-cp313-*.whl` |
+| Intel Arc **A 系列**（A770/A750/A580/A380） | `omni_xpu_kernel-0.2.0b1+torch213.dg2-cp313-*.whl` |
+| Intel Arc **B 系列**（B580/B570 等） | `omni_xpu_kernel-0.2.0b2+torch213.bmg-cp313-*.whl` |
 
 ```bat
-:: 按你的架构二选一（必须 Python 3.13 + torch 2.13，仓库默认就是）
-.venv\Scripts\python.exe -m pip install --no-deps wheels\omni_xpu_kernel-<架构>-cp313-cp313-win_amd64.whl
+:: 1) 到 Release 页面下载对应架构的 whl
+:: 2) 安装（必须 Python 3.13 + torch 2.13，仓库默认就是）
+.venv\Scripts\python.exe -m pip install --no-deps <下载好的 whl 路径>
 ```
 
 **回退**：在 UI 里选了 `xpu_int8` 但没装轮子/装错架构/版本不符时，会自动回退到

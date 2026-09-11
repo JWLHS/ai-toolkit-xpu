@@ -3,7 +3,19 @@
 这两个 wheel 是**可选的加速后端**，装不装都不影响正常训练；不装时一切走原来的
 torchao int8（见下面"回退行为"）。
 
-| 文件 | 适用显卡 | 来源 |
+> **从 Release 下载**（推荐，仓库里不再保存二进制）：
+> <https://github.com/JWLHS/ai-toolkit-xpu/releases/tag/omni-wheels-0.2.0>
+>
+> ```bat
+> :: A 系列（dg2）
+> curl -L -O https://github.com/JWLHS/ai-toolkit-xpu/releases/download/omni-wheels-0.2.0/omni_xpu_kernel-0.2.0b1+torch213.dg2-cp313-cp313-win_amd64.whl
+> :: B 系列（bmg）
+> curl -L -O https://github.com/JWLHS/ai-toolkit-xpu/releases/download/omni-wheels-0.2.0/omni_xpu_kernel-0.2.0b2+torch213.bmg-cp313-cp313-win_amd64.whl
+> ```
+>
+> 下面的文件名 / 架构对照表在 Release 页面同样适用。
+
+| 文件（在 Release 附件里） | 适用显卡 | 来源 |
 | --- | --- | --- |
 | `omni_xpu_kernel-0.2.0b1+torch213.dg2-cp313-cp313-win_amd64.whl` | **Intel Arc A 系列**（A770 / A750 / A580 / A380，即 DG2） | 本仓库自己编译 |
 | `omni_xpu_kernel-0.2.0b2+torch213.bmg-cp313-cp313-win_amd64.whl` | **Intel Arc B 系列**（B580 / B570 等 Battlemage，即 BMG） | 由上游提供 |
@@ -23,17 +35,17 @@ torch 的 XPU 依赖包提供）；oneAPI 只在**自己编译**时才需要。
 ## 安装
 
 ```bat
-:: A 系列（A770/A750/A580/A380）
-.venv\Scripts\python.exe -m pip install --no-deps wheels\omni_xpu_kernel-0.2.0b1+torch213.dg2-cp313-cp313-win_amd64.whl
+:: A 系列（A770/A750/A580/A380）—— 先把 whl 下载到当前目录
+.venv\Scripts\python.exe -m pip install --no-deps omni_xpu_kernel-0.2.0b1+torch213.dg2-cp313-cp313-win_amd64.whl
 
 :: B 系列（B580/B570 等）
-.venv\Scripts\python.exe -m pip install --no-deps wheels\omni_xpu_kernel-0.2.0b2+torch213.bmg-cp313-cp313-win_amd64.whl
+.venv\Scripts\python.exe -m pip install --no-deps omni_xpu_kernel-0.2.0b2+torch213.bmg-cp313-cp313-win_amd64.whl
 ```
 
 用 uv 环境也可以：
 
 ```bat
-uv pip install --python .venv\Scripts\python.exe --no-deps wheels\<对应的 whl>
+uv pip install --python .venv\Scripts\python.exe --no-deps <下载好的 whl>
 ```
 
 自检（会打印目标架构、精度、速度，并确认与你的显卡匹配）：
