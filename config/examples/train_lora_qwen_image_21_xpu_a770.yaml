@@ -1,0 +1,80 @@
+# Qwen-Image 2.1 在 Intel Arc（A770 16GB）上的推荐训练配置
+# 实测（A770、xpu_int8、100% 层级卸载、LoRA r16、batch 1、开 latent/TE 缓存）：
+#   768 档  ~9 s/it，训练显存 ~10GB，峰值 ~11.5GB（保存 checkpoint 时）
+#   512 档  ~6 s/it；1024 档 ~17 s/it（峰值会摸到 16GB）
+#
+# 前置（权重/配置来源）：
+#   1) 可选装 XPU int8 加速轮子（见 wheels/README.md），没装会自动回退 torchao int8；
+#   2) 把 MODELS_PATH 指向你的 ComfyUI models 目录，加载器会优先用本地
+#      qwen_image_2.1_bf16.safetensors / text_encoders/qwen3vl_8b_bf16.safetensors /
+#      vae/qwen_image_2.1_vae_bf16.safetensors，只从 HF 取配置与 processor。
+---
+job: extension
+config:
+  name: qwen21_768_xpu
+  process:
+    - type: sd_trainer
+      training_folder: "output"
+      disable_sampling: false
+      device: xpu
+      network:
+        type: lora
+        linear: 16
+        linear_alpha: 16
+      save:
+        dtype: float16
+        save_every: 500
+        max_step_saves_to_keep: 3
+      datasets:
+        - folder_path: "/path/to/your/dataset"   # 改成你的素材目录（图片 + 同名 .txt 打标）
+          caption_ext: txt
+          caption_dropout_rate: 0.05
+          cache_latents_to_disk: true            # 必开：768 档每步省 2~3 倍时间
+          cache_text_embeddings: true            # 必开：编码一次后卸载 TE
+          resolution:
+            - 768
+          num_repeats: 1
+      train:
+        batch_size: 1
+        steps: 1500
+        gradient_accumulation_steps: 1
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true
+        unload_text_encoder: true
+        noise_scheduler: flowmatch
+        optimizer: adamw8bit
+        lr: 1e-4
+        dtype: bf16
+      logging:
+        use_ui_logger: true
+        log_every: 1
+      model:
+        name_or_path: "Comfy-Org/Qwen-Image-2.1"
+        arch: qwen_image_2
+        quantize: true
+        qtype: xpu_int8
+        quantize_te: true
+        qtype_te: xpu_int8
+        # 16GB 卡上必须开：Qwen-Image 2.1 权重放不进显存，关掉会 DEVICE_LOST
+        layer_offloading: true
+        layer_offloading_transformer_percent: 1.0
+        layer_offloading_text_encoder_percent: 1.0
+        low_vram: false
+        model_kwargs: {}
+      sample:
+        sampler: flowmatch
+        sample_every: 500
+        sample_start_step: 500
+        width: 768
+        height: 768
+        prompts:
+          - "a cinematic photo of a mountain temple at dawn"
+        neg: ""
+        seed: 42
+        walk_seed: false
+        guidance_scale: 1.0
+        sample_steps: 20
+  meta:
+    name: "[name]"
+    version: '1.0'
