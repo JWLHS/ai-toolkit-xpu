@@ -279,6 +279,11 @@ cd ui && npm start                          # 中文 UI + 曲线图
   唯一要注意的是：真要跑 triton kernel（或 `torch.compile`）时必须有一个 C 编译器在 `CC` 里，
   本机可指向 oneAPI 的 `icx.exe`；否则会报 `Failed to find C compiler`。
 - **HF 报 “client has been closed”？** huggingface_hub 的 httpx 线程问题，文件缓存后设 `HF_HUB_OFFLINE=1` 重跑即可。
+- **日志里出现 `Failed to quantize <层名>: x must be on XPU device`？** 这是 XPU int8 内核的
+  "该层此刻在 CPU 上"保护：**那一层会保持 bf16，其余层照常量化**，训练不受影响，
+  只是那部分权重的显存/内存占用比预期高。常见于「文本编码器 100% 卸到内存」或
+  加载器先做 offload 再量化的模型（z_image / krea2 的 TE 都见过）。想让它们也量化，
+  把该模块的 `layer_offloading_*_percent` 调低（让它留在设备上量化）即可。
 
 ## 9. 分享清单
 
