@@ -98,7 +98,7 @@ run_xpu.bat
 | --- | --- |
 | 后端代码基线 | 上游 `0.12.27` → 本 fork 记为 **`0.12.27+xpu`**（见 `version.py` / `pyproject.toml`） |
 | UI | 同步到上游 **0.13.6**（中文词条在 `ui_i18n/`） |
-| 关键依赖 | torch `2.13.0+xpu`、torchao `0.17.0+xpu`、triton-xpu `3.7.2` |
+| 关键依赖 | torch `2.13.0+xpu`、torchvision `0.28.0+xpu`、torchao `0.17.0+xpu`、triton-xpu `3.7.2` |
 | Python | `>=3.11,<3.14`，`.python-version` 默认钉 `3.13` |
 
 ## 可选：XPU int8 加速后端（需手动安装，按显卡架构选）

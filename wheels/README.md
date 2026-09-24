@@ -15,18 +15,25 @@ torchao int8（见下面"回退行为"）。
 >
 > 下面的文件名 / 架构对照表在 Release 页面同样适用。
 
-| 文件（在 Release 附件里） | 适用显卡 | 来源 |
-| --- | --- | --- |
-| `omni_xpu_kernel-0.2.0b1+torch213.dg2-cp313-cp313-win_amd64.whl` | **Intel Arc A 系列**（A770 / A750 / A580 / A380，即 DG2） | 本仓库自己编译 |
-| `omni_xpu_kernel-0.2.0b2+torch213.bmg-cp313-cp313-win_amd64.whl` | **Intel Arc B 系列**（B580 / B570 等 Battlemage，即 BMG） | 由上游提供 |
-| （可选）`0.2.0b1+torch213.dg2.2` | A 系列，上游发布的更新版本 | [Blackwood416/omni-xpu-kernel Releases](https://github.com/Blackwood416/omni-xpu-kernel/releases) |
+| 文件（在 Release 附件里） | 适用显卡 | 适用 torch | 来源 |
+| --- | --- | --- | --- |
+| `omni_xpu_kernel-0.2.0b1+torch213.dg2-cp313-cp313-win_amd64.whl` | **Arc A 系列**（A770/A750/A580/A380） | **2.13（当前仓库默认）** | 本仓库编译 |
+| `omni_xpu_kernel-0.2.0b2+torch213.bmg-cp313-cp313-win_amd64.whl` | **Arc B 系列**（B580/B570 等） | 2.13 | 上游提供 |
+| （可选）`omni_xpu_kernel-0.2.0b1+torch213.dg2.2-...whl` | Arc A 系列，上游更新的小版本 | 2.13 | [上游 Release](https://github.com/Blackwood416/omni-xpu-kernel/releases) |
+
+> **没有 `+torch214` 的轮子**：本仓库钉 torch 2.13（原因见
+> [XPU_ADAPTATION_GUIDE.md 第 8 节](../XPU_ADAPTATION_GUIDE.md)），
+> 2.14 在本机实测训练必崩（驱动级 0xC0000005），因此不发 2.14 的轮子。
+> 上游 [Blackwood416/omni-xpu-kernel Releases](https://github.com/Blackwood416/omni-xpu-kernel/releases)
+> 有 `+torch214` 构建，但同样会撞上该崩溃——除非你是纯推理场景。
 
 ## 安装前必须对上的三件事
 
 轮子文件名就是约束，**任一条不符就别装**（装了也会被检测拒绝并回退）：
 
 1. **Python 3.13**（`cp313`）—— 本仓库 `uv sync` 装的默认就是 3.13；
-2. **PyTorch 2.13**（`+torch213`）—— `pyproject.toml` 已钉 `torch 2.13.0+xpu`；
+2. **PyTorch 版本要跟轮子标签一致**：仓库当前锁的是 **torch 2.13.0+xpu**，
+   所以要用 `+torch213` 的轮子（文件名里带标签，装错会被自动检测并回退）；
 3. **显卡架构匹配**（`dg2` = A 系列，`bmg` = B 系列）。
 
 **不需要**安装 oneAPI：轮子运行时不依赖 oneAPI（自带 `dnnl.dll`，SYCL 运行时由

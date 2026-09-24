@@ -258,6 +258,11 @@ class StableDiffusion:
     @property
     def is_ssd(self):
         return self.arch == 'ssd'
+
+    @property
+    def load_rgba(self) -> bool:
+        # no legacy arch has an RGBA VAE
+        return False
     
     @property
     def is_v3(self):
@@ -2431,6 +2436,7 @@ class StableDiffusion:
             max_length=None,
             dropout_prob=0.0,
             control_images=None,
+            target_size=None,  # accepted for parity with BaseModel; legacy archs ignore it
     ) -> PromptEmbeds:
         # sd1.5 embeddings are (bs, 77, 768)
         prompt = prompt

@@ -386,7 +386,15 @@ def release_process_memory(tag: str = "") -> None:
     """
     import gc
 
+    if os.environ.get("AI_TOOLKIT_XPU_MEM_RELEASE", "on").lower() in ("0", "off", "false"):
+        return
     gc.collect()
+    try:
+        # 先让设备侧停下来：回收工作集时若有内核在跑/有映射在被驱动使用，
+        # Windows 可能直接把进程打崩（torch 2.14 + 修好的 EmptyWorkingSet 实测过）。
+        torch.xpu.synchronize()
+    except Exception:  # noqa: BLE001
+        pass
     try:
         torch.xpu.empty_cache()
     except Exception:  # noqa: BLE001

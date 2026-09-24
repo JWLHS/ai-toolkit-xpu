@@ -295,9 +295,6 @@ def quantize(
     # AI_TOOLKIT_MEM_DEBUG=1 时，量化结束后打印大张量分布与持有者（定位内存问题）
     if os.environ.get("AI_TOOLKIT_MEM_DEBUG") == "1":
         omni_int8.debug_memory_report("量化后")
-    # 量化完把被分配器"吃住不放"的内存还给系统（Windows 不会自己还）；
-    # 每次调用都做，代价是几毫秒，最后一次即模型量化结束后那次。
-    omni_int8.release_process_memory("量化后")
 
 
 def _has_quantizable_linear(module: torch.nn.Module, weights, exclude=None) -> bool:
@@ -541,3 +538,8 @@ def quantize_model(
         # model_to_quantize.to(base_model.device_torch, dtype=base_model.torch_dtype)
         quantize(model_to_quantize, weights=quantization_type, exclude=exclude_modules)
         freeze(model_to_quantize)
+
+    # 全部量化结束、模型已经放好之后再回收一次进程工作集。
+    # 注意不能放在 quantize() 里面每块都做：那是 28 次连续回收，会在量化中途
+    # 动到 XPU 驱动已映射的页，实测直接把进程打崩（torch 2.14 + 修好的回收调用）。
+    omni_int8.release_process_memory("quantize_model 完成")
