@@ -2345,11 +2345,17 @@ class SDTrainer(BaseSDTrainProcess):
         # call, so the caching allocator's reserved pool only grows (measured: 1.3GB in
         # use vs 18.3GB reserved on a 16GB Arc A770 → spilled into shared memory and
         # steps dropped from ~22s to ~40s). Hand the unused blocks back to the driver
-        # each optimizer step; opt out with AITK_XPU_EMPTY_CACHE=0.
+        # each optimizer step.
+        #
+        # torch >= 2.14 默认**不**做这次回收：它的 XPU 分配器/驱动在"释放大张量后
+        # empty_cache"时会把 ze_intel_gpu64.dll 打崩（0xC0000005，实测 3/3 必崩；
+        # 不调则 0/3）。策略见 toolkit/device_utils.per_step_empty_cache_enabled()，
+        # 环境变量 AITK_XPU_EMPTY_CACHE=1/0 可强制覆盖。
+        from toolkit.device_utils import per_step_empty_cache_enabled
         if (
             self.device_torch.type == "xpu"
             and not self.is_grad_accumulation_step
-            and os.environ.get("AITK_XPU_EMPTY_CACHE", "1") != "0"
+            and per_step_empty_cache_enabled()
         ):
             try:
                 torch.xpu.empty_cache()

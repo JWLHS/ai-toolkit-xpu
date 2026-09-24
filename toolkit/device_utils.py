@@ -26,9 +26,38 @@ def empty_cache():
     """
     gc.collect()
     if is_xpu_available():
-        torch.xpu.empty_cache()
+        if per_step_empty_cache_enabled():
+            torch.xpu.empty_cache()
     elif is_cuda_available():
         torch.cuda.empty_cache()
+
+
+def _torch_version_at_least(major: int, minor: int) -> bool:
+    try:
+        parts = torch.__version__.split("+")[0].split(".")
+        return (int(parts[0]), int(parts[1])) >= (major, minor)
+    except Exception:
+        return False
+
+
+def per_step_empty_cache_enabled() -> bool:
+    """XPU：训练循环里每步调用 torch.xpu.empty_cache() 是否可以开。
+
+    torch 2.14 的 XPU 缓存分配器和 Intel 驱动在这里有缺陷：**释放过大张量之后**
+    调用 torch.xpu.empty_cache() 会把 ze_intel_gpu64.dll 打崩（0xC0000005），
+    最小复现（A770，两个驱动版本 32.0.101.8991 / 32.0.101.8860 都复现）::
+
+        conv 反向 -> del 张量 + torch.xpu.empty_cache() -> attention   # 3/3 崩
+        同样序列去掉 del + empty_cache                                # 0/3 通过
+
+    所以 **torch >= 2.14 默认关掉**这个每步回收（2.13 保持原样：它靠这次回收把
+    reserved pool 从 18GB 压回实际用量，关掉会更快撑爆显存）。
+    需要时可用环境变量强制覆盖：AITK_XPU_EMPTY_CACHE=1 / 0。
+    """
+    override = os.environ.get("AITK_XPU_EMPTY_CACHE")
+    if override is not None:
+        return override.strip() != "0"
+    return not _torch_version_at_least(2, 14)
 
 def manual_seed(seed: int):
     """

@@ -15,16 +15,40 @@
   * 打印 `ALL OK` 并以 0 退出 -> 这套 torch + 驱动可以训练；
   * 进程直接消失（无 traceback、shell 退出码 -1073741819 / 0xC0000005）-> 驱动级崩溃，
     换 torch 版本（本项目用 2.13.0+xpu）或更新显卡驱动。
+
+排查记录（2026-09-24，A770 + 两个驱动版本都复现）：
+  触发条件是 **`del` 之后调用 `torch.xpu.empty_cache()`**（torch 2.14 的 XPU 缓存分配器
+  与驱动在释放大块显存后踩空指针）：conv 反向 -> del + empty_cache -> attention 稳定崩，
+  同样的序列去掉 `del + empty_cache` 就 3/3 通过。
+  训练侧对应的是 `SDTrainer` 每步的 `torch.xpu.empty_cache()`（`AITK_XPU_EMPTY_CACHE=0` 可关）。
+  本脚本同样尊重该变量：设 `AITK_XPU_EMPTY_CACHE=0` 时不再显式 empty_cache。
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 import torch
 
 DEV = "xpu"
+
+def _empty_cache_enabled() -> bool:
+    """与训练侧同一套策略（见 toolkit/device_utils.per_step_empty_cache_enabled）：
+    torch >= 2.14 默认关掉，AITK_XPU_EMPTY_CACHE=1/0 可强制覆盖。"""
+    override = os.environ.get("AITK_XPU_EMPTY_CACHE")
+    if override is not None:
+        return override.strip() != "0"
+    try:
+        parts = torch.__version__.split("+")[0].split(".")
+        return (int(parts[0]), int(parts[1])) < (2, 14)
+    except Exception:
+        return True
+
+
+if not _empty_cache_enabled():
+    torch.xpu.empty_cache = lambda *a, **k: None
 
 
 def mark(msg: str) -> None:
@@ -107,3 +131,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -250,24 +250,40 @@ cd ui && npm start                          # 中文 UI + 曲线图
 
 - **torchao 用 0.17 还是 0.18？** 默认 **0.17.0+xpu**（krea2 int8 实测每步 19-22s、显存 8.7GB，最稳）。注意：0.17 的 **float8** 同样缺 `Float8Tensor.abs`（二次量化会静默失败），0.18 则 int8/float8 都缺（int8 换成新 `Int8Tensor` 且丢了幂等保护）。[fix_torchao_018_xpu.py](fix_torchao_018_xpu.py) 已改为“缺啥补啥、不看版本”，`run.py` 自动加载，0.17 的 float8 也被兜住（实测通过）。补充：0.18 在本机 ai-toolkit 训练中实测速度/显存劣于 0.17，但根因未定位（可能与我们 dequantize 式补丁实现或使用方式有关），不作为 0.18 缺陷结论。已向官方提 issue 并补充修正说明：[pytorch/ao#4845](https://github.com/pytorch/ao/issues/4845#issuecomment-5454705829)。
 - **transformers 用 4.57.3 还是 5.5.3？** 5.5.3（官方 0.12.27 按 5.x 编写）。
-- **torch 用 2.13 还是 2.14？** **必须用 2.13.0+xpu**（本仓库钉死）。2.14.0+xpu 在 A770 + 当前 Intel 驱动上
-  **训练必崩**，不是配置问题、不是本仓库代码问题——实测证据（2026-09-24，同机同驱动）：
+- **torch 用 2.13 还是 2.14？** 本仓库默认钉 **2.13.0+xpu**（最省心），但 **2.14 现在也能跑**——
+  前提是跳过每步的 `torch.xpu.empty_cache()`，这一点**代码已自动按版本处理**
+  （见 `toolkit/device_utils.per_step_empty_cache_enabled()`：torch ≥ 2.14 默认关，
+  2.13 保持开；`AITK_XPU_EMPTY_CACHE=1/0` 可强制覆盖）。
+
+  **根因（2026-09-24 深挖结论）**：崩溃不在算子本身，而是
+  **`del` 掉大张量之后调用 `torch.xpu.empty_cache()`** 触发 torch 2.14 XPU 缓存分配器
+  与驱动的空指针。定点二分（A770，驱动 32.0.101.8991 与 32.0.101.8860 都复现）：
+
+  | 序列 | 结果 |
+  | --- | --- |
+  | conv 反向 → `del` + **empty_cache** → attention | **3/3 崩**（`ze_intel_gpu64.dll` 0xC0000005） |
+  | conv 反向 → attention（**不调** empty_cache） | 0/3 ✅ |
+  | matmul → empty_cache → attention | 1/3 崩（概率性） |
+  | matmul → conv → attention（全程无 empty_cache） | 0/3 ✅ |
+  | 只分配/释放 + empty_cache（无大计算）→ attention | 0/3 ✅ |
+
+  加上修复后实测：探针 **默认 0/3 崩**（强制 `AITK_XPU_EMPTY_CACHE=1` 则必崩，反向验证了诊断）；
+  **krea2 768 跑 10/10 步（12.5–13.6 s/it）、Qwen-Image 2.1 768 跑 2/2 步，均正常存盘**。
+
+  崩溃现场（事件日志，两个驱动都同形态、偏移不同）：
 
   | 测试 | 环境 | 结果 |
   | --- | --- | --- |
-  | krea2 2 步 / 768 / omni int8 后端 | torch 2.14 + 上游 `+torch214.dg2` 轮子 | 崩：`ze_intel_gpu64.dll` +0x404ed4 `0xC0000005` |
-  | SDXL 512 / int8 / 关层级卸载 | torch 2.14 | 崩（同偏移） |
-  | SDXL 512 / 不量化 / 不卸载 | torch 2.14 | 崩（同偏移） |
-  | **`scripts/xpu_train_ops_check.py`**（纯 torch，无本仓库代码） | torch 2.14 + **ComfyUI 自带 cp311 环境** | 崩（同偏移） |
-  | 同一脚本 | torch 2.13.0+xpu | **全绿** |
-  | torch 2.14 + Intel 运行时降到 2026.0.0 | — | 起不来：`c10_xpu.dll` 符号缺失（WinError 127） |
+  | 驱动 32.0.101.8991（`ze_intel_gpu64.dll` 1.15.39183.3） | krea2 / SDXL / 纯 torch 三种场景 | `0xC0000005`，偏移 **0x404ed4** |
+  | 驱动 32.0.101.8860（`ze_intel_gpu64.dll` 1.15.38308.0） | 同一探针 | `0xC0000005`，偏移 **0x308f1c** |
 
-  结论：崩溃发生在 **conv 反向 → attention 前向** 这类训练型算子序列上，与 Python 版本（3.11/3.13 都复现）、
-  与量化后端、与层级卸载、与本仓库代码均无关；ComfyUI 上"2.14 正常"只是因为它只跑推理。
-  最小复现脚本已随仓库提供（见 `scripts/xpu_train_ops_check.py`），可用于换机器/换驱动时快速判定。
-  其它理由：2.14 的 XPU 仍**没有编译 flash attention**（SDPA 只有 `MATH` 可用），升级无 attention 收益；
+  与 Python 版本（cp311/cp313 都复现）、量化后端（torchao/omni/不量化）、层级卸载
+  （开/关）均无关——**只看有没有那步 empty_cache**。ComfyUI 上"2.14 正常"是因为它只跑推理，
+  而且推理路径里没有"释放大张量后 empty_cache"这个组合。
+
+  判定工具：`scripts/xpu_train_ops_check.py`（纯 torch，几秒出结果；同样尊重 `AITK_XPU_EMPTY_CACHE`）。
+  其它仍成立的理由：2.14 的 XPU 仍**没有编译 flash attention**（SDPA 只有 `MATH` 可用）；
   且 2.14 会连带 torchao 只能用 0.18（int8 重复量化有已知问题，见 [pytorch/ao#4845](https://github.com/pytorch/ao/issues/4845)）。
-  注：代码用的是 SDPA 优先级列表，将来任一版本 XPU 支持 flash attention 会自动启用，无需改代码。
 - **`fix_torchao_xpu.py` 还有用吗？** 已过时（0.12.27 自带 ostris 量化后端），已从仓库移除；保留的本 fork 补丁只有 `fix_torchao_018_xpu.py`。
 - **triton-xpu 能手动升到 3.8.0 吗？** 能装上、也能跑（2026-09-24 实测：`triton-xpu==3.8.0` 覆盖 +
   `CC="C:\Program Files (x86)\Intel\oneAPI\compiler\2026.1\bin\icx.exe"`，自写 add/silu kernel JIT 编译通过、

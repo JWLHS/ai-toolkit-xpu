@@ -85,6 +85,23 @@ UI 里已新增 `Qwen-Image 2.1（文生图 / 参考图）` 入口，默认值�
 
 ## 下次同步的做法
 
+## torch 2.14 崩溃：根因已定位（2026-09-24）
+
+之前记录的"2.14 训练必崩（`ze_intel_gpu64.dll` 0xC0000005）"已经找到确切触发条件：
+
+> **`del` 掉大张量之后调用 `torch.xpu.empty_cache()`**，随后任何算子都可能触发驱动空指针。
+> conv 反向 → `del` + `empty_cache` → attention 这条序列 **3/3 稳定崩**；
+> 同样的序列**不调** empty_cache 则 **0/3 通过**（两个驱动版本、cp311/cp313、三种量化后端都验证过）。
+
+训练侧对上的就是我们 `SDTrainer` 每步的那次 `torch.xpu.empty_cache()`（本 fork 当初为了
+压 reserved pool 加的）。修复方式：`toolkit/device_utils.per_step_empty_cache_enabled()`
+—— **torch ≥ 2.14 默认跳过，2.13 维持原样**，环境变量 `AITK_XPU_EMPTY_CACHE=1/0` 可覆盖；
+`scripts/xpu_train_ops_check.py` 用同一套策略做自检。
+
+修复后实测（A770 + 驱动 32.0.101.8860）：探针默认 0/3 崩；krea2 768 **10/10 步**
+（12.5–13.6 s/it）、Qwen-Image 2.1 768 **2/2 步**，checkpoint 均正常保存。
+仓库默认依赖仍钉 2.13，2.14 属于"已适配、可选升级"状态。
+
 1. `git clone https://github.com/ostris/ai-toolkit` 到临时目录并 `git fetch`；
 2. 拉出 `origin/main` 的工作树（`git worktree add --detach <dir> <sha>`）；
 3. 用"提交级 diff + `git apply`"逐个试；**新增目录直接 copy**，改动核心文件的按 hunk 手工过；
