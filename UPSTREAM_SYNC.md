@@ -32,36 +32,51 @@ Qwen-Image 2.1 顺带在上游核心做了两件对**所有模型**都无害的�
    `save_image` 遇到 RGBA 自动改存 png。**本 fork 现存模型全部返回 `False`**，
    即默认行为与合并前完全一致，只是为将来接入 RGBA VAE 的模型铺好路。
 
-## 待跟进（未合并）
+### Qwen-Image 2.1（`c2622ed` 等 5 个提交）— **已合并并实测**
 
-### 1. Qwen-Image 2.1（`c2622ed` 等 5 个提交）
+为了让它能在 XPU 上加载并训练，本轮把上游的 **`toolkit/models/v2` 整套模型栈**搬了过来
+（新增 38 个文件；`_mixin.py` 232 → 850 行），并在 XPU 侧做了三处对接：
 
-- 上游新增 `extensions_built_in/diffusion_models/qwen_image_2/`（约 4200 行）。
-- **阻塞点**：它 import 了 `toolkit.models.v2.text_encoders.qwen3_vl`、
-  `toolkit.models.v2.vae.qwen_image`、`toolkit.models.v2.diffusion_models.z_image`
-  与新版 `toolkit.models.v2._mixin`（上游 750+ 行，本仓库 232 行）。
-  本仓库缺 `toolkit/models/v2/` 的 31 个文件，硬合会连带改动所有现存模型的加载路径。
-- 想接的话，**前置工作是把 `toolkit/models/v2/` 整栈同步过来**（等于一次较大的基线升级），
-  之后 qwen_image_2 / ming_image 就是纯新增目录。
+1. `toolkit/util/quantize.py`：补上 v2 需要的 `dequantize_ostris_to_linear` /
+   `quantize_module` / `attach_ara_and_quantize`（外加 `_wrap_qlinear_ndim`、
+   `keep_on_quantize_device`），我们自己的 `omnitype`（xpu_int8/xpu_fp8）实现原样保留，
+   所以 v2 模型的量化照样走 XPU 内核，缺轮子时仍然自动回退 torchao int8。
+2. `toolkit/lora_special.py`：`LINEAR_MODULES` 补上 `OmniInt8Linear` / `OmniFp8Linear`。
+   v2 模型是"先量化、后建 LoRA"，少了这两行会直接 `create LoRA for U-Net: 0 modules`。
+3. `toolkit/models/base_model.py`：补 `component_load_kwargs` / `get_latent_space_version` /
+   `get_text_embedding_space_version` / sample-step 钩子；`toolkit/sample_step_hook.py`。
 
-### 2. Ming-Image（`77847d7` + `460c29b`）
+实测（A770 16GB，本地 ComfyUI 权重 + `MODELS_PATH`，`qtype: xpu_int8`，层级卸载 100%）：
 
-- 同样依赖 v2 栈（`v2.vae.qwen_image`、`v2.diffusion_models.z_image`、新版 `_mixin`）。
-- MoE 部分走 triton，但上游代码有 `x.is_cuda` 守卫 → XPU 会走 torch 回退（速度未知）。
-- 与第 1 条一起做，成本相同。
+| 项目 | 结果 |
+| --- | --- |
+| 加载 | transformer 32 blocks、文本编码器 36 blocks 全部走 XPU int8；VAE 正常 |
+| 训练 | 2 步 / 512 / LoRA r16：**5.73–6.56 s/it**，loss 0.604，checkpoint 正常落盘 |
+| 显存 | 峰值 **10.3GB**（16GB 卡留有余量），训练中稳态约 2–3GB |
+| 内存 | 峰值 47GB（含缓存阶段） |
 
-### 3. 模型卸载稳定性 + D-OPSD bleed loss（`683fe8a`）
+UI 里已新增 `Qwen-Image 2.1（文生图 / 参考图）` 入口，默认值就是上面这套。
+
+### Ming-Image（`77847d7` + `460c29b`）— 已合并，未实测
+
+- 代码、v2 依赖、UI 入口都已就位（`Ming-Image 0.1 Design（MoE·实验）`），
+  但本机没有 Ming-Image 权重，**未做真机验证**。
+- MoE 部分走 triton，上游有 `x.is_cuda` 守卫 → XPU 会走 torch 回退（速度未知）。
+- 有权重后可用同一条路径验证：
+  `python testing/test_model_loading.py --arch ming_image --device xpu --allow-download`
+
+### 模型卸载稳定性 + D-OPSD bleed loss（`683fe8a`）— 未合并
 
 - 动 `toolkit/memory_management/manager.py`、`toolkit/models/v2/_mixin.py`、
   `toolkit/util/quantize.py` —— 都是本 fork 为了 XPU 显存/搬运改过的文件，
   且 D-OPSD 部分依赖 v2 栈。**建议随 v2 同步一起做**，单独合容易把已验证的搬运逻辑改坏。
 
-### 4. 性能/杂项合集（`7195abc`）
+### 性能/杂项合集（`7195abc`）— 未合并
 
 - 同样大量落在 `manager.py` / `manager_modules.py` / `v2/_mixin.py`。
 - 里面每个模型的"性能修复"大多是几行，等 v2 同步时一起对齐。
 
-### 5. 其它上游提交（与本 fork 无关或不适用）
+### 其它上游提交（与本 fork 无关或不适用）
 
 - YuE2 / MOSS / Qwen2.5-Omni 等音频、字幕、captioner 相关：本 fork 未裁剪这些功能，
   但它们不涉及 XPU 关键路径，按需再合。
@@ -80,3 +95,18 @@ Qwen-Image 2.1 顺带在上游核心做了两件对**所有模型**都无害的�
 5. 每次合并后至少跑：`python -m py_compile`（改动文件）→
    `python -c "import extensions_built_in.diffusion_models"` →
    `python run.py config/<小配置>`（2 步冒烟）→ 需要时再跑 UI `npm run build`。
+
+## 用本地 ComfyUI 权重验证新模型（不用重新下模型）
+
+`toolkit/models/v2` 的加载器会在 `MODELS_PATH` 指向的目录里找 comfy 单文件，
+命中本地文件就不下载权重，只从 HF 取配置/processor：
+
+```powershell
+$env:MODELS_PATH = "E:\Comfyui\ComfyUI\models"   # 你自己的 ComfyUI models 目录
+$env:HF_HUB_OFFLINE = "0"                        # 配置/processor 还是要联网
+.\.venv\Scripts\python.exe testing\test_model_loading.py --arch qwen_image_2 --device xpu --allow-download
+```
+
+文件优先级按请求的 qtype 排：`qtype: xpu_int8`（或其它"非 convrot/float8/nvfp4"后端）
+会优先选 **bf16** 单文件，然后由 XPU 内核现场量化；想要"直接用预量化文件"就把
+qtype 设成 `convrot8`（那个走的是 Ostris 后端，XPU 上没有专门内核，速度不划算）。

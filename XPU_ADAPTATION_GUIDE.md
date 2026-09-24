@@ -167,6 +167,48 @@ Turbo 是 8 步蒸馏模型，用于训练会出伪影。参数参考：AdamW8Bi
 - VAE：Qwen-Image VAE（HF `Qwen/Qwen-Image`，约 0.24GB）。本地 `vae\qwen\qwen_image_vae.safetensors` 是 ComfyUI 键名，与当前 diffusers 命名不一致，直接下载缓存最省事。
 - 断网/网络不稳时：文件进缓存后设 `HF_HUB_OFFLINE=1` 可跳过网络。
 
+### 5.5 Qwen-Image 2.1 / Ming-Image（v2 模型栈，已实测）
+
+上游这两个新模型不是老式 `BaseModel` 子类，而是走 `toolkit/models/v2` 的"通用模型栈"。
+本 fork 已经把整套 v2 栈并进来，XPU 侧只需要三处对接（这也是从官方仓库自己改造时
+**必须照做**的三步，否则会出现"能 import、一建 LoRA 就 0 modules"这类怪现象）：
+
+1. **量化接口**：v2 的 `aitk_post_load()` 会调用
+   `dequantize_ostris_to_linear` / `quantize_module` / `attach_ara_and_quantize`
+   （`toolkit/util/quantize.py`）。本 fork 把这三个函数补齐，同时保留自己的
+   `omnitype`（`xpu_int8`/`xpu_fp8`）分支，所以 v2 模型的量化照样落回 XPU 内核。
+2. **LoRA 目标名单**：v2 是"先量化、后建 LoRA"，线性层类名已经变成量化后的类。
+   `toolkit/lora_special.py` 的 `LINEAR_MODULES` 必须包含 `OmniInt8Linear`/`OmniFp8Linear`
+   （`network_mixins.py`、`lycoris_special.py` 同理）。
+3. **BaseModel 钩子**：`component_load_kwargs()`（把 qtype/offload/device 传给 v2 模块）、
+   `get_latent_space_version()`、`get_text_embedding_space_version()`，以及
+   `toolkit/sample_step_hook.py`（采样进度回调）。
+
+实测（A770 16GB + 本地 ComfyUI 权重，`qtype: xpu_int8`，层级卸载 100%，512 档 LoRA r16）：
+
+| 指标 | 数值 |
+| --- | --- |
+| 训练步时 | **5.7–6.6 s/it** |
+| 显存峰值 | **10.3GB**（卡上 16GB） |
+| 内存峰值 | 47GB（含 latent/text-embedding 缓存阶段） |
+| 结果 | loss 0.604（2 步），checkpoint 正常保存 |
+
+用本地权重验证（不必重新下载十几 GB）：
+
+```powershell
+$env:MODELS_PATH = "E:\Comfyui\ComfyUI\models"   # 你的 ComfyUI models 目录
+$env:HF_HUB_OFFLINE = "0"                        # 配置/processor 仍需联网（一次性）
+.\.venv\Scripts\python.exe testing\test_model_loading.py --arch qwen_image_2 --device xpu --allow-download
+```
+
+要点：加载器按**请求的 qtype** 给本地文件排序 —— `xpu_int8` 这类"要现场量化"的后端
+会优先选 **bf16** 单文件；想直接用预量化文件就把 qtype 设成 `convrot8`（走 Ostris 后端，
+XPU 上没有专门内核，不划算）。跑训练前把 `MODELS_PATH` 也导给训练进程（UI 由
+`run_xpu.bat` 继承环境变量）。
+
+Ming-Image 同样已接入（UI 里 `Ming-Image 0.1 Design（MoE·实验）`），但本机没有它的权重，
+只做了代码级验证：MoE 走 triton、上游有 `x.is_cuda` 守卫 → XPU 会回退 torch 路径。
+
 ## 6. 曲线图与汉化 UI
 
 链路：训练器 → `UILogger` → `output/<任务>/loss_log.db` → `/api/jobs/[id]/loss` → uPlot。

@@ -31,6 +31,10 @@ LINEAR_MODULES = [
     'LoRACompatibleLinear',
     'QLinear',
     'OstrisLinear',
+    # XPU int8/fp8 后端（可选 omni_xpu_kernel）。v2 模型是先量化再建 LoRA，
+    # 少了这两行会 "create LoRA for U-Net: 0 modules"。
+    'OmniInt8Linear',
+    'OmniFp8Linear',
     # 'GroupNorm',
 ]
 CONV_MODULES = [

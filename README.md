@@ -101,6 +101,10 @@ run_xpu.bat
 | 关键依赖 | torch `2.13.0+xpu`、torchvision `0.28.0+xpu`、torchao `0.17.0+xpu`、triton-xpu `3.7.2` |
 | Python | `>=3.11,<3.14`，`.python-version` 默认钉 `3.13` |
 
+模型支持：本 fork 已跟进上游的 **`toolkit/models/v2` 模型栈**，因此
+**Qwen-Image 2.1（含参考图训练）已在 A770 上实测可训练**（512 档 5.7~6.6 s/it、显存峰值 10.3GB），
+Ming-Image 也已接入但本机无权重、未实测。详见 [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md)。
+
 ## 可选：XPU int8 加速后端（需手动安装，按显卡架构选）
 
 从 **[Releases](https://github.com/JWLHS/ai-toolkit-xpu/releases/tag/omni-wheels-0.2.0)**
