@@ -227,6 +227,15 @@ cd ui && npm start                          # 中文 UI + 曲线图
   且 2.14 会连带 torchao 只能用 0.18（int8 重复量化有已知问题，见 [pytorch/ao#4845](https://github.com/pytorch/ao/issues/4845)）。
   注：代码用的是 SDPA 优先级列表，将来任一版本 XPU 支持 flash attention 会自动启用，无需改代码。
 - **`fix_torchao_xpu.py` 还有用吗？** 已过时（0.12.27 自带 ostris 量化后端），已从仓库移除；保留的本 fork 补丁只有 `fix_torchao_018_xpu.py`。
+- **triton-xpu 能手动升到 3.8.0 吗？** 能装上、也能跑（2026-09-24 实测：`triton-xpu==3.8.0` 覆盖 +
+  `CC="C:\Program Files (x86)\Intel\oneAPI\compiler\2026.1\bin\icx.exe"`，自写 add/silu kernel JIT 编译通过、
+  数值正确，随后 krea2 训练冒烟 2/2 步正常），**但没必要也不建议**：
+  1. `torch==2.13.0+xpu` 的元数据里**硬依赖 `triton-xpu==3.7.2`**（2.14 才依赖 3.8.0），
+     写进 `pyproject.toml` 会让 `uv lock` 直接无解，所以仓库保持 3.7.2；手动覆盖的版本下次 `uv sync` 会被还原；
+  2. 本 fork 的训练路径**不使用 triton**：`toolkit/util/convrot_quant.py` 的 triton 分支有
+     `packed.is_cuda` 守卫，omnigen2 的 triton kernel 同理，XPU 上一律走 torch 回退。
+  唯一要注意的是：真要跑 triton kernel（或 `torch.compile`）时必须有一个 C 编译器在 `CC` 里，
+  本机可指向 oneAPI 的 `icx.exe`；否则会报 `Failed to find C compiler`。
 - **HF 报 “client has been closed”？** huggingface_hub 的 httpx 线程问题，文件缓存后设 `HF_HUB_OFFLINE=1` 重跑即可。
 
 ## 9. 分享清单
