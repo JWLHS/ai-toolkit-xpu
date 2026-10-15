@@ -3,6 +3,7 @@ from .hidream import HidreamModel, HidreamE1Model
 from .f_light import FLiteModel
 from .omnigen2 import OmniGen2Model
 from .flux_kontext import FluxKontextModel
+from .flux3 import Flux3Model
 from .wan22 import Wan225bModel, Wan2214bModel, Wan2214bI2VModel
 from .qwen_image import QwenImageModel, QwenImageEditModel, QwenImageEditPlusModel
 from .qwen_image_2 import QwenImage2Model
@@ -32,6 +33,7 @@ AI_TOOLKIT_MODELS = [
     FLiteModel,
     OmniGen2Model,
     FluxKontextModel,
+    Flux3Model,
     Wan225bModel,
     Wan2214bI2VModel,
     Wan2214bModel,

@@ -18,6 +18,7 @@ GENERIC = {"modality": "image", "model": {}, "sample": dict(IMG)}
 # needs_control_image: the arch requires ctrl_img (edit / i2v models)
 # size_locked: only the default resolution is valid
 ARCH_REGISTRY: Dict[str, dict] = {
+    "flux3": {"modality": "image", "model": {"name_or_path": "black-forest-labs/flux-3-image-klein-base", "quantize": True, "qtype": "convrot8", "quantize_te": True, "qtype_te": "convrot8"}, "sample": {"width": 1024, "height": 1024, "num_inference_steps": 28, "guidance_scale": 3.5}},
     "zimage": {"modality": "image", "model": {"name_or_path": "Tongyi-MAI/Z-Image-Turbo"}, "sample": {**IMG, "num_inference_steps": 8, "guidance_scale": 1.0}},
     "zimage_l2p": {"modality": "image", "model": {"name_or_path": "zhen-nan/L2P/model-1k-merge.safetensors", "extras_name_or_path": "Tongyi-MAI/Z-Image-Turbo", "quantize_te": True}, "sample": {**IMG, "num_inference_steps": 8, "guidance_scale": 1.0}},
     "qwen_image": {"modality": "image", "model": {"name_or_path": "Qwen/Qwen-Image", "quantize": True, "quantize_te": True}, "sample": {**IMG, "num_inference_steps": 20}},

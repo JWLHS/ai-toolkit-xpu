@@ -451,6 +451,32 @@ export const modelArchs: ModelArch[] = [
     },
   },
   {
+    name: 'flux3',
+    label: 'FLUX.3 Image Klein（文生图）',
+    group: 'image',
+    gateUrl: 'https://huggingface.co/black-forest-labs/flux-3-image-klein-base',
+    defaults: {
+      // 权重优先取本地 ComfyUI 目录（MODELS_PATH）里的 comfy 单文件：
+      // flux3_image_klein_bf16 / _int8_convrot / _nvfp4，VAE 用 vae/flux2-vae.safetensors，
+      // 文本编码器用 text_encoders/qwen3vl_4b_*；配置与 tokenizer 走 HF 的 Qwen/Qwen3-VL-4B-Instruct。
+      'config.process[0].model.name_or_path': ['black-forest-labs/flux-3-image-klein-base', defaultNameOrPath],
+      'config.process[0].model.quantize': [true, false],
+      'config.process[0].model.quantize_te': [true, false],
+      // XPU：默认走 omni int8（没装轮子会自动回退 torchao int8）
+      'config.process[0].model.qtype': ['xpu_int8', 'xpu_int8'],
+      'config.process[0].model.qtype_te': ['xpu_int8', 'xpu_int8'],
+      'config.process[0].model.low_vram': [false, false],
+      'config.process[0].sample.sampler': ['flowmatch', 'flowmatch'],
+      'config.process[0].train.noise_scheduler': ['flowmatch', 'flowmatch'],
+      'config.process[0].train.timestep_type': ['weighted', 'sigmoid'],
+      'config.process[0].sample.guidance_scale': [3.5, 4],
+      'config.process[0].sample.sample_steps': [28, 25],
+      'config.process[0].train.unload_text_encoder': [true, false],
+    },
+    disableSections: ['network.conv'],
+    additionalSections: ['model.low_vram', 'model.layer_offloading'],
+  },
+  {
     name: 'qwen_image_2',
     label: 'Qwen-Image 2.1（文生图 / 参考图）',
     group: 'image',

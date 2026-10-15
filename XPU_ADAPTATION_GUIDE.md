@@ -239,7 +239,7 @@ cd ui && npm start                          # 中文 UI + 曲线图
   `toolkit/device_utils.py` 提供 `rope_dtype(device)` 与 `adjust_dtype_for_device(dtype, device)`
   （XPU/MPS → float32，其余 → float64），已改的地点包括
   chroma `rope`、hidream `rope`/`expand_timesteps`、boogu_image `get_freqs_cis`、omnigen2 `get_freqs_cis`、
-  zeta_chroma 时间步、prx_pixel_t2i 的 `maybe_adjust_dtype_for_device`、wan21 rotary、krea2 `rope`；
+  zeta_chroma 时间步、prx_pixel_t2i 的 `maybe_adjust_dtype_for_device`、wan21 rotary、krea2 `rope`、flux3 `rope`；
   minimax_h3 的位置网格在 CPU 上以 float64 构建（保证网格精度），**搬运到设备时降为 float32**。
   回归验证脚本：`scripts/verify_xpu_fp64_paths.py`（助手行为 + 前提确认 + 6 条模型路径实测）。
 - **环境用 uv 还是 pip？** 推荐 **uv**：`pyproject.toml` + `uv.lock` + `.python-version` 即环境定义，

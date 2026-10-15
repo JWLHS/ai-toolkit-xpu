@@ -57,6 +57,43 @@ Qwen-Image 2.1 顺带在上游核心做了两件对**所有模型**都无害的�
 
 UI 里已新增 `Qwen-Image 2.1（文生图 / 参考图）` 入口，默认值就是上面这套。
 
+### FLUX.3 Image Klein（上游 PR #1078 + 3 个后续修复）— **已合并并实测**
+
+上游 `91bdc6d`（PR #1078）新增 `extensions_built_in/diffusion_models/flux3/`（9 个文件、
+约 2200 行），随后三个提交补了 comfy 格式文本编码器加载、文本嵌入缓存，以及
+"本地 ComfyUI 单文件优先"（`12395a1`）。本 fork 已整套搬入并接上 XPU：
+
+1. **新增目录 + 注册**：`flux3/`（flux3.py / transformer / image_vae / pipeline /
+   positional / text_encoder / checkpoints）+ `__init__.py` 两行 + `registry.py` 的
+   `flux3` 条目（模型列表现为 38 个）。
+2. **同步它依赖的工具模块**（上游 9 月之后改过，我们此前停在 9 月版）：
+   `toolkit/util/comfy_quant_import.py`（177→378 行：header 式量化元数据、nvfp4/fp8
+   合并键拆分等）、`convrot_quant.py`、`ostris_quant.py`、`dequantize.py`，外加 4 个
+   新文件 `float8_quant.py` / `mixed_precision.py` / `streamed_safetensors.py` /
+   `unified_memory.py`。**我们自己的 `omni_int8.py` 与 XPU 补丁未动。**
+3. **`toolkit/models/v2/_mixin.py`**：补上游的 `_markers_from_header()` —— comfy 的
+   header 式量化布局把每层配置放在 safetensors metadata（`_quantization_metadata`）里，
+   这里合成 `<layer>.comfy_quant` marker，让导入器只面对一种布局。
+4. **XPU 适配（1 处）**：`flux3/src/transformer.py::rope()` 原本用 `torch.float64`
+   建频率表 → XPU 报 `Required aspect fp64 is not supported on the device`；改为
+   设备感知（XPU 用 fp32，CUDA 保持 fp64；该表两行后本来就会 `.float()`）。
+
+实测（A770 16GB、`xpu_int8`、100% 层级卸载、512 档 → 分桶 384×672、LoRA r16、batch 1）：
+
+| 项目 | 结果 |
+| --- | --- |
+| 训练 | **2/2 步**，**4.41–5.34 s/it** |
+| 显存 | 峰值 **8.1GB**（16GB 卡余量充足） |
+| 内存 | 峰值 13.6GB |
+| 产物 | LoRA 80MB 正常存盘 |
+| 权重来源 | **全部本地**：transformer `flux3_image_klein_bf16`、TE `text_encoders/qwen/qwen3vl_4b_bf16`、VAE `vae/flux/flux2-vae`（选择器递归查 MODELS_PATH，零下载） |
+
+UI 已加 `FLUX.3 Image Klein（文生图）` 入口（默认 xpu_int8 + 层级卸载）；
+示例配置：`config/examples/train_lora_flux3_xpu_a770.yaml`。
+
+> 注意：`flux3_image_klein_sd_*`（step-distilled 变体）不是训练候选，加载也会被
+> `ref_time_in` 键拒绝，别拿它当底模。
+
 ### Ming-Image（`77847d7` + `460c29b`）— 已合并，未实测
 
 - 代码、v2 依赖、UI 入口都已就位（`Ming-Image 0.1 Design（MoE·实验）`），
