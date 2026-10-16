@@ -102,9 +102,10 @@ run_xpu.bat
 | Python | `>=3.11,<3.14`，`.python-version` 默认钉 `3.13` |
 
 模型支持：本 fork 已跟进上游的 **`toolkit/models/v2` 模型栈**，因此
-**FLUX.3 Image Klein 与 Qwen-Image 2.1 均已在 A770 上实测可训练**
-（FLUX.3 512 档 4.4~5.3 s/it、显存峰值 8.1GB；Qwen-Image 2.1 512 档 5.7~6.6 s/it、峰值 10.3GB），
-Ming-Image 也已接入但本机无权重、未实测。详见 [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md)。
+**FLUX.3 Image Klein、Qwen-Image 2.1、MOSS-Image 均已在 A770 上实测可训练**
+（FLUX.3 512 档 4.4~5.3 s/it、峰值 8.1GB；Qwen-Image 2.1 512 档 5.7~6.6 s/it、峰值 10.3GB；
+MOSS-Image 512 档 5.9~7.8 s/it、峰值 8.8GB），Ming-Image 也已接入但本机无权重、未实测。
+详见 [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md)。
 
 ## 可选：XPU int8 加速后端（需手动安装，按显卡架构选）
 

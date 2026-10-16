@@ -1,0 +1,80 @@
+# MOSS-Image（Base / SFT）在 Intel Arc（A770 16GB）上的推荐训练配置
+# 实测（A770、xpu_int8、层级卸载 100%（含文本编码器）、LoRA r16、batch 1、开 latent/TE 缓存）：
+#   512 档  2 步 5.85–7.78 s/it，显存峰值 8.8GB，内存峰值 38GB（含 TE 反量化/再量化）
+#
+# 权重全部可用本地 ComfyUI 单文件（放在 MODELS_PATH 下，选择器会递归查找）：
+#   DiT : diffusion_models/**/moss_image_base_bf16.safetensors（或 int8_convrot）
+#   VAE : vae/**/flux2-vae.safetensors（FLUX.2 共用）
+#   TE  : text_encoders/**/qwen3.5_9b_int8_convrot.safetensors（Qwen3.5-9B）
+# 只需要联网取 Qwen/Qwen3.5-9B 的 config/tokenizer（几 MB，一次缓存）；
+# 国内网络不稳时设 HF_ENDPOINT=https://hf-mirror.com。
+---
+job: extension
+config:
+  name: moss_image_xpu
+  process:
+    - type: sd_trainer
+      training_folder: "output"
+      disable_sampling: false
+      device: xpu
+      network:
+        type: lora
+        linear: 16
+        linear_alpha: 16
+      save:
+        dtype: float16
+        save_every: 500
+        max_step_saves_to_keep: 3
+      datasets:
+        - folder_path: "/path/to/your/dataset"   # 改成你的素材目录（图片 + 同名 .txt 打标）
+          caption_ext: txt
+          caption_dropout_rate: 0.05
+          cache_latents_to_disk: true            # 必开
+          cache_text_embeddings: true            # 必开（TE 只用来出 embedding，之后卸载）
+          resolution:
+            - 512
+          num_repeats: 1
+      train:
+        batch_size: 1
+        steps: 1500
+        gradient_accumulation_steps: 1
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true
+        unload_text_encoder: true
+        noise_scheduler: flowmatch
+        optimizer: adamw8bit
+        lr: 1e-4
+        dtype: bf16
+      logging:
+        use_ui_logger: true
+        log_every: 1
+      model:
+        name_or_path: "OpenMOSS-Team/MOSS-Image-Base"
+        arch: moss_image
+        quantize: true
+        qtype: xpu_int8
+        quantize_te: true
+        qtype_te: xpu_int8
+        layer_offloading: true
+        layer_offloading_transformer_percent: 1.0
+        layer_offloading_text_encoder_percent: 1.0
+        low_vram: false
+        model_kwargs:
+          uncond_skip_layers: [22]   # 官方默认：CFG 3，负向分支跳过第 22 层
+      sample:
+        sampler: flowmatch
+        sample_every: 500
+        sample_start_step: 500
+        width: 512                       # 16GB 卡建议 512–768；1024 会明显抬高启动峰值
+        height: 512
+        prompts:
+          - "a cinematic photo of a mountain temple at dawn"
+        neg: ""
+        seed: 42
+        walk_seed: false
+        guidance_scale: 3.0
+        sample_steps: 30
+  meta:
+    name: "[name]"
+    version: '1.0'

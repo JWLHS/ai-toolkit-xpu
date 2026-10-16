@@ -23,6 +23,7 @@ from .krea2 import Krea2Model
 from .boogu_image import BooguImageModel, BooguImageEditModel
 from .mageflow import MageFlowModel, MageFlowEditModel
 from .minimax_h3 import MinimaxH3Model, MinimaxH3Ref2VAModel
+from .moss_image import MossImageModel
 
 AI_TOOLKIT_MODELS = [
     # put a list of models here
@@ -64,4 +65,5 @@ AI_TOOLKIT_MODELS = [
     MageFlowEditModel,
     MinimaxH3Model,
     MinimaxH3Ref2VAModel,
+    MossImageModel,
 ]

@@ -41,10 +41,25 @@ UNMANAGED_MODULES = [
     "LSTM",
     "GRU",
     "RNN",
-    "Conv3d"
+    "Conv3d",
+    # Conv1d 也必须登记：层级卸载开启时模型不会整体 .to(device)，
+    # 只有登记过的模块会跟着 memory_managed_to() 一起走。漏登记的话
+    # Conv1d 权重会留在 CPU（state_dict 落地处），而输入在设备上 ->
+    # "XPUBFloat16Type does not equal CPUBFloat16Type (xpu_convolution)"。
+    # 实测于 Qwen3.5 线性注意力里的 depthwise conv1d（moss_image 的文本编码器）。
+    # 这类短卷积权重极小（每层几十 KB），常驻设备代价可忽略。
+    "Conv1d",
 ]
 
 UNMANAGED_MODULES_INCLUDES = ["RotaryEmbedding", "Norm", "RotaryPosEmbed"]
+
+# 有些模块把参数直接挂在自己身上（不在任何子模块里），典型例子是
+# Qwen3.5 线性注意力的 GatedDeltaNet：A_log / dt_bias 是裸 Parameter，
+# 而它的 Linear 子层照常需要被搬运。层级卸载开启时模型不会整体
+# .to(device)，这类裸参数没人搬 -> "found at least two devices, xpu:0 and cpu"。
+# 这里把命中的模块的**直接**参数/缓冲登记为 unmanaged（跟着模型整体走），
+# 它的子模块仍按常规流程处理。
+UNMANAGED_PARAM_MODULES_INCLUDES = ["GatedDeltaNet"]
 
 
 class MemoryManager:
@@ -178,6 +193,15 @@ class MemoryManager:
                 ):
                     # unmanaged
                     module._memory_manager.unmanaged_modules.append(child_module)
+                elif any(
+                    inc in child_module.__class__.__name__
+                    for inc in UNMANAGED_PARAM_MODULES_INCLUDES
+                ):
+                    # 只登记"挂在模块上的裸参数/缓冲"，子模块照常参与搬运
+                    for param in child_module.parameters(recurse=False):
+                        module._memory_manager.unmanaged_modules.append(param)
+                    for buf in child_module.buffers(recurse=False):
+                        module._memory_manager.unmanaged_modules.append(buf)
                 else:
                     continue
 

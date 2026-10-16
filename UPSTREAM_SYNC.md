@@ -94,6 +94,55 @@ UI 已加 `FLUX.3 Image Klein（文生图）` 入口（默认 xpu_int8 + 层级�
 > 注意：`flux3_image_klein_sd_*`（step-distilled 变体）不是训练候选，加载也会被
 > `ref_time_in` 键拒绝，别拿它当底模。
 
+### MOSS-Image（`e05a3a4` / `c6a9b56` / `b7cd8a1` / `29f5ff4` / `80cb872`）— **已合并并实测**
+
+上游这一串（含 Base / SFT / 编辑训练 / tokenizer 修复）已整套搬入：
+
+1. **新增目录**：`extensions_built_in/diffusion_models/moss_image/`（5 个文件：
+   moss_image.py + src/{checkpoints,pipeline,transformer}）+ 新文本编码器
+   `toolkit/models/v2/text_encoders/qwen35.py`（Qwen3.5-9B，纯语言塔）；
+2. **注册**：模型列表（39 个）+ `registry.py` 三条（`moss_image` / `moss_image:base` /
+   `moss_image:base_edit`，编辑版带 `edit/kv_cache/match_target_res`）；
+   UI 加了三张卡（默认 `xpu_int8`、`uncond_skip_layers: [22]`、LoRA 绕开第 22 层）；
+3. **`toolkit/models/v2/_mixin.py`**：并入 `80cb872` 的 tokenizer 完整性校验
+   （`_local_first(..., validate=...)` + `_tokenizer_complete`）——transformers 5.5.3
+   在"部分缓存"的仓库上会返回**只有 1 个 token 的 tokenizer** 而不报错，没有这个校验就会静默用坏；
+4. **权重来源**：全部走本地 ComfyUI 单文件（选择器递归查找 MODELS_PATH）：
+   DiT `moss_image_base_bf16` / `_int8_convrot`、VAE `vae/**/flux2-vae.safetensors`、
+   TE `text_encoders/**/qwen3.5_9b_int8_convrot.safetensors`；只有 Qwen/Qwen3.5-9B 的
+   config/tokenizer 需要联网（国内可设 `HF_ENDPOINT=https://hf-mirror.com`）。
+
+**XPU 适配两处（都在本 fork 侧）**：
+
+- `moss_image/src/transformer.py::_time_modulation()` 用 `torch.float64` 建时间频率表 →
+  XPU 报 `Required aspect fp64 is not supported on the device`；改为 `rope_dtype(device)`
+  （与该表下方本来就会做的 `.float()` 一致）。
+- **层级卸载登记表补两类**（`toolkit/memory_management/manager.py`）——这是 MOSS 暴露出来的
+  一个**通用机制缺口**，上游**没有**处理（`git grep A_log/GatedDeltaNet` 只有我们移植时写的注释）：
+  1. `Conv1d` 补进 `UNMANAGED_MODULES`：Qwen3.5 线性注意力里的 depthwise conv1d 之前没人登记，
+     卸载时权重留在 CPU → `XPUBFloat16Type ≠ CPUBFloat16Type (xpu_convolution)`；
+  2. 新增 `UNMANAGED_PARAM_MODULES_INCLUDES = ["GatedDeltaNet"]`：把这类模块**直接挂着的裸参数**
+     （`A_log` / `dt_bias`）登记为 unmanaged，子层照常搬运 → 否则崩在
+     `found at least two devices, xpu:0 and cpu`。
+
+  机制说明：层级卸载开启时模型**不做整体 `.to(device)`**，只有"登记过的"模块/参数会跟着
+  `memory_managed_to()` 走；**没登记的带权重模块或裸参数就永远留在 CPU**。CUDA 上同样成立，
+  只是那边显存大、通常不给 TE 开卸载，所以没暴露。
+
+实测（A770 16GB、`xpu_int8`、层级卸载 100%（**含文本编码器**）、512 档、LoRA r16、batch 1）：
+
+| 项目 | 结果 |
+| --- | --- |
+| 训练 | **2/2 步**，5.85–7.78 s/it，checkpoint 正常落盘 |
+| **显存峰值** | **8.8GB**（修复前 TE 不卸载时是 15.9GB；现在 TE 能安全卸载） |
+| 内存峰值 | 38GB（含 TE 反量化→再量化 + latent/TE 缓存） |
+| 权重来源 | 全部本地，零下载 |
+
+示例配置：`config/examples/train_lora_moss_image_xpu_a770.yaml`。
+
+> 待办：`ace_step`（音频）的 DiT 里也有 `nn.Conv1d`（patchify），开层级卸载时会遇到与
+> Conv1d 相同的场景——它现在已因为上面的登记而受益，但值得单独跑一轮验证。
+
 ### Ming-Image（`77847d7` + `460c29b`）— 已合并，未实测
 
 - 代码、v2 依赖、UI 入口都已就位（`Ming-Image 0.1 Design（MoE·实验）`），
