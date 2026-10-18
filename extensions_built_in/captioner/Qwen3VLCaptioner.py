@@ -119,7 +119,7 @@ class Qwen3VLCaptioner(BaseCaptioner):
                             "type": "image",
                             "image": img,
                         },
-                        {"type": "text", "text": self.caption_config.caption_prompt},
+                        {"type": "text", "text": self.resolve_prompt(self.caption_config.caption_prompt, file_path)},
                     ],
                 }
             ]
