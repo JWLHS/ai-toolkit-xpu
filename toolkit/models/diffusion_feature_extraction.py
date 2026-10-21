@@ -548,8 +548,13 @@ class DiffusionFeatureExtractor4(nn.Module):
                     # min 0.001
                     tv = torch.clamp(tv, min=0.001)
 
-            # step latent
-            x0 = noisy_latents - tv * noise_pred
+            if self.sd_ref is not None and getattr(self.sd_ref(), "get_x0_prediction", None) is not None:
+                x0 = self.sd_ref().get_x0_prediction(noise_pred, noisy_latents, tv)
+            elif self.sd_ref is not None and getattr(self.sd_ref(), "x0_pred", False):
+                x0 = noise_pred
+            else:
+                # step latent
+                x0 = noisy_latents - tv * noise_pred
 
             stepped_latents = x0
 
@@ -764,8 +769,13 @@ class DiffusionFeatureExtractor6(nn.Module):
                 # min 0.001
                 tv = torch.clamp(tv, min=0.001)
             
-        # step latent
-        x0 = noisy_latents - tv * noise_pred
+        if self.sd_ref is not None and getattr(self.sd_ref(), "get_x0_prediction", None) is not None:
+            x0 = self.sd_ref().get_x0_prediction(noise_pred, noisy_latents, tv)
+        elif self.sd_ref is not None and getattr(self.sd_ref(), "x0_pred", False):
+            x0 = noise_pred
+        else:
+            # step latent
+            x0 = noisy_latents - tv * noise_pred
         
         stepped_latents = x0
             
@@ -934,7 +944,9 @@ class DiffusionFeatureExtractor7(nn.Module):
             target_0_1 = (tensors + 1) / 2  # 0 to 1
         
         if not self.do_partial_step:
-            if getattr(self.sd_ref(), "x0_pred", False):
+            if getattr(self.sd_ref(), "get_x0_prediction", None) is not None:
+                x0 = self.sd_ref().get_x0_prediction(noise_pred, noisy_latents, tv)
+            elif getattr(self.sd_ref(), "x0_pred", False):
                 x0 = noise_pred
             else:
                 # step latent
@@ -1137,7 +1149,9 @@ class DiffusionFeatureExtractor9(nn.Module):
             target_0_1 = (tensors + 1) / 2  # 0 to 1
         
         if not self.do_partial_step:
-            if getattr(self.sd_ref(), "x0_pred", False):
+            if getattr(self.sd_ref(), "get_x0_prediction", None) is not None:
+                x0 = self.sd_ref().get_x0_prediction(noise_pred, noisy_latents, tv)
+            elif getattr(self.sd_ref(), "x0_pred", False):
                 x0 = noise_pred
             else:
                 # step latent
@@ -1300,7 +1314,9 @@ class DiffusionFeatureExtractor10(nn.Module):
             target_0_1 = (tensors + 1) / 2  # 0 to 1
 
         if not self.do_partial_step:
-            if getattr(self.sd_ref(), "x0_pred", False):
+            if self.sd_ref is not None and getattr(self.sd_ref(), "get_x0_prediction", None) is not None:
+                x0 = self.sd_ref().get_x0_prediction(noise_pred, noisy_latents, tv)
+            elif self.sd_ref is not None and getattr(self.sd_ref(), "x0_pred", False):
                 x0 = noise_pred
             else:
                 # step latent

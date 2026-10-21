@@ -1751,3 +1751,10 @@ class BaseModel:
             base_model=self,
             use_comfy_weights=mc.model_kwargs.get("use_comfy_weights", True),
         )
+    def get_x0_prediction(self, model_output: torch.Tensor, model_input: torch.Tensor, sigma: torch.Tensor):
+        # can be overridden in child classes to get the x0 prediction from model output
+        # step latent, use here or with do_fft_loss
+        if self.x0_pred:
+            return model_output
+        else:
+            return model_input - sigma * model_output
