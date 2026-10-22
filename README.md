@@ -102,9 +102,14 @@ run_xpu.bat
 | Python | `>=3.11,<3.14`，`.python-version` 默认钉 `3.13` |
 
 模型支持：本 fork 已跟进上游的 **`toolkit/models/v2` 模型栈**，因此
-**FLUX.3 Image Klein、Qwen-Image 2.1、MOSS-Image 均已在 A770 上实测可训练**
+**FLUX.3 Image Klein、Qwen-Image 2.1、Qwen-Image 2.1 Turbo、MOSS-Image、
+MOSS-Image SFT Edit 均已在 A770 上实测通过**
 （FLUX.3 512 档 4.4~5.3 s/it、峰值 8.1GB；Qwen-Image 2.1 512 档 5.7~6.6 s/it、峰值 10.3GB；
-MOSS-Image 512 档 5.9~7.8 s/it、峰值 8.8GB），Ming-Image 也已接入但本机无权重、未实测。
+MOSS-Image 512 档 5.9~7.8 s/it、峰值 8.8GB）。Qwen Turbo 的训练需要单独的官方
+training adapter；MOSS SFT Edit 的支持图与目标图按文件名配对。
+
+Iris-3B 的 XPU int8 生成和短训练也已验证，但它目前不属于 ComfyUI 核心模型，
+本仓库只保证 ai-toolkit 训练链路的兼容性。Ming-Image 已接入但本机无权重、未实测。
 详见 [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md)。
 
 ## 可选：XPU int8 加速后端（需手动安装，按显卡架构选）

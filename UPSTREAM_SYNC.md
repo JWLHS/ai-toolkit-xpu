@@ -1,7 +1,7 @@
 # 上游跟进状态（ai-toolkit → ai-toolkit-xpu）
 
 本 fork 的基线：后端代码 `0.12.27`，UI 同步到上游 `0.13.6`（中文词条见 `ui_i18n/`）。
-上游仓库：<https://github.com/ostris/ai-toolkit>（本文件记录最后一次核对：**2026-09-24**，上游 HEAD `460c29b`）。
+上游仓库：<https://github.com/ostris/ai-toolkit>（本文件记录最后一次核对：**2026-10-23**，上游 HEAD `14f8f95`）。
 
 合并原则：**只手工挑后端能安全落地的提交**。上游近期的模型支持大量依赖新的
 `toolkit/models/v2/` 模型栈（我们这条线只有 9 个文件的旧版、上游已有 40 个），
@@ -150,6 +150,50 @@ UI 已加 `FLUX.3 Image Klein（文生图）` 入口（默认 xpu_int8 + 层级�
 - MoE 部分走 triton，上游有 `x.is_cuda` 守卫 → XPU 会走 torch 回退（速度未知）。
 - 有权重后可用同一条路径验证：
   `python testing/test_model_loading.py --arch ming_image --device xpu --allow-download`
+
+### 2026-10-23 上游同步（排除 H3 / Qwen3.8）
+
+本轮从上游 `3770c8f` 之后挑入以下提交，H3 系列和 Qwen3.8 27B 暂不进入本 fork：
+
+| 上游提交 | 内容 | XPU 状态 |
+| --- | --- | --- |
+| `8cf43dd2` | 缓存文本嵌入后把文本编码器放回 CPU | 已合入；避免缓存阶段结束后 TE 占着 XPU |
+| `9d408eb6` | FLUX.3 多参考图缩放修复 | 已合入 |
+| `9a1828f2` | MOSS q/k/v LoRA 保存为 ComfyUI 兼容的未融合格式 | 已合入；保存与重新加载互相转换 |
+| `c22f21fa` | JPEG/PNG/WebP EXIF 方向与 WebP 尺寸识别 | 已合入；XPU 无关，纯图片元数据路径 |
+| `7c6b168c` / `85d01c6a` | caption 标签可读取的文件扩展名白名单、路径穿越防护 | 已合入 |
+| `5305fef` | x0 预测逻辑下沉到模型类 | 已合入；后续 x-prediction 模型复用 |
+| `0cbac2c1` / `dc3e230` | 批次并行解码、跨数据集合并分桶 | 已合入；XPU 下 `batch_load_threads` 默认降为 2，避免和层级卸载抢 CPU |
+| `2f5dc0d` / `2702e7b` / `65b2ca8` | MOSS SFT Edit、参考隔离 SDPA、批量文本编码 | 已合入；XPU int8 编辑采样 2 步通过 |
+| `e1973f7` | ConvRot Triton `libdevice` 兼容 | 已合入 |
+| `dee332e` | Iris-3B 像素空间文生图 | 已合入；A770 实测通过，但本机测试权重已按要求移除 |
+| `f69d4f4` | Qwen-Image 2.1 Turbo + 训练适配器 | 已合入；A770 XPU 实测通过 |
+
+**Qwen-Image 2.1 Turbo 实测（A770 16GB）**
+
+- 官方 Turbo 权重 14.2GB，训练适配器约 159MB。
+- `xpu_int8`、100% 层级卸载、训练适配器挂载后，8 步首轮采样约 28 秒。
+- 完全卸载后的 2 步采样约 14 秒。
+- XPU 峰值分配约 3.43GB，reserved 约 15.04GB。
+- 训练适配器只用于训练，采样时关闭；它不会写入最终用户 LoRA。
+
+**MOSS-Image SFT Edit 实测**
+
+- 本地 `moss_image_sft_bf16.safetensors`、本地 Qwen3.5 TE、FLUX.2 VAE。
+- `xpu_int8` + 100% 层级卸载，2 步编辑采样约 15 秒。
+- XPU 峰值分配约 2.93GB，reserved 约 7.16GB。
+
+示例配置：
+
+- `config/examples/train_lora_qwen_image_21_turbo_xpu_a770.yaml`
+- `config/examples/train_lora_moss_image_edit_xpu_a770.yaml`
+- `config/examples/train_lora_iris3b_xpu_a770.yaml`
+
+**暂不合并**
+
+- H3 / Fast H3 系列：本机显存和 XPU attention 支持不合适，按用户要求跳过。
+- Qwen3.8 27B：用户要求暂缓；移出本轮代码与 UI，待后续单独验证推理栈后再接入。
+- Docker 专用提交：本 fork 不维护 XPU 容器。
 
 ### 模型卸载稳定性 + D-OPSD bleed loss（`683fe8a`）— 未合并
 

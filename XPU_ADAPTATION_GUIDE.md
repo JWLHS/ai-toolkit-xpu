@@ -209,6 +209,18 @@ XPU 上没有专门内核，不划算）。跑训练前把 `MODELS_PATH` 也导�
 Ming-Image 同样已接入（UI 里 `Ming-Image 0.1 Design（MoE·实验）`），但本机没有它的权重，
 只做了代码级验证：MoE 走 triton、上游有 `x.is_cuda` 守卫 → XPU 会回退 torch 路径。
 
+### 5.6 Qwen-Image 2.1 Turbo、MOSS Edit 与 Iris-3B
+
+| 模型 | XPU 默认 | 已验证 |
+| --- | --- | --- |
+| Qwen-Image 2.1 Turbo | `xpu_int8` + 100% 层级卸载 | 8 步采样、training adapter 挂载/卸载通过；适配器只训练时启用，不会写进最终 LoRA |
+| MOSS-Image SFT Edit | `xpu_int8` + 100% 层级卸载 | 目标图/参考图配对、kv_cache 编辑采样 2 步通过 |
+| Iris-3B | `xpu_int8`、SDPA、像素空间 | 512 档生成和 5 步 LoRA 训练通过；ComfyUI 核心尚无原生支持 |
+
+例子配置在 `config/examples/`。从零改造时，新增模型目录仍按本指南的流程：
+先从官方挑对应提交，再接 `component_load_kwargs` / `MemoryManager`，最后跑
+`py_compile`、模型加载、2 步前向和一次短训练。H3 和 Qwen3.8 不在本轮 XPU 适配范围内。
+
 ## 6. 曲线图与汉化 UI
 
 链路：训练器 → `UILogger` → `output/<任务>/loss_log.db` → `/api/jobs/[id]/loss` → uPlot。
