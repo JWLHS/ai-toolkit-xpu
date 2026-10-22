@@ -9,9 +9,6 @@ export interface CaptionOption {
     group: CaptionGroup;
     hasMultiLinePrompts?: boolean;
     minNewTokens?: number;
-    supportsLoras?: boolean;
-    // 该打标器已经使用专用解码路径，不再套 torch.compile
-    noCompile?: boolean;
     defaults?: { [key: string]: any };
     additionalSections?: AdditionalSections[];
     name_or_path_options?: SelectOption[];
@@ -163,7 +160,6 @@ export const captionerTypes: CaptionOption[] = [
         label: 'Qwen3.8 27B',
         group: 'image/video',
         supportsLoras: true,
-        noCompile: true,
         defaults: {
             'config.process[0].caption.loras': [[], undefined],
             'config.process[0].caption.model_name_or_path': ['Comfy-Org/Qwen3.8-27B/text_encoders/qwen3.8_27b_w4a8.safetensors', defaultNameOrPath],

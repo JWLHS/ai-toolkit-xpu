@@ -214,27 +214,11 @@ const CaptionSimpleJob: React.FC<Props> = ({ jobConfig, setJobConfig, gpuIDs, se
               checked={jobConfig.config.process[0].caption.recaption}
               onChange={value => setJobConfig(value, 'config.process[0].caption.recaption')}
             />
-            {!selectedCaptionOption?.noCompile && (
-              <Checkbox
-                label="编译模型"
-                checked={jobConfig.config.process[0].caption.compile || false}
-                onChange={value => setJobConfig(value, 'config.process[0].caption.compile')}
-              />
-            )}
-            {additionalSections.includes('caption.extract_vocals_before_transcribe') && (
-              <Checkbox
-                label="Extract Vocals Before Transcribing"
-                checked={jobConfig.config.process[0].caption.extract_vocals_before_transcribe || false}
-                onChange={value => setJobConfig(value, 'config.process[0].caption.extract_vocals_before_transcribe')}
-              />
-            )}
-            {additionalSections.includes('caption.keep_timestamps') && (
-              <Checkbox
-                label="Keep Lyric Timestamps"
-                checked={jobConfig.config.process[0].caption.keep_timestamps || false}
-                onChange={value => setJobConfig(value, 'config.process[0].caption.keep_timestamps')}
-              />
-            )}
+            <Checkbox
+              label="编译模型"
+              checked={jobConfig.config.process[0].caption.compile || false}
+              onChange={value => setJobConfig(value, 'config.process[0].caption.compile')}
+            />
             {additionalSections.includes('caption.thinking') && (
               <Checkbox
                 label="思考"
