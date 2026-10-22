@@ -161,7 +161,19 @@ MODEL_TESTS = {
         "sample": {**IMG, "num_inference_steps": 25, "guidance_scale": 4.0},
     },
     "iris3b": {
-        "model": {"name_or_path": "speridlabs/iris-3b", "quantize_te": True},
+        "model": {
+            "name_or_path": os.environ.get("IRIS3B_PATH", "speridlabs/iris-3b"),
+            "quantize_te": True,
+        },
+        "xpu_model": {
+            "quantize": True,
+            "qtype": "xpu_int8",
+            "quantize_te": True,
+            "qtype_te": "xpu_int8",
+            "layer_offloading": True,
+            "layer_offloading_transformer_percent": 1.0,
+            "layer_offloading_text_encoder_percent": 1.0,
+        },
         "sample": {**IMG, "num_inference_steps": 20, "guidance_scale": 3.0},
     },
     "zeta_chroma": {
@@ -193,10 +205,31 @@ MODEL_TESTS = {
         # model_kwargs.turbo samples with the checkpoint's fixed 8-step
         # schedule at CFG 1
         "model": {
-            "name_or_path": "Comfy-Org/Qwen-Image-2.1/diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors",
+            "name_or_path": os.environ.get(
+                "QWEN_TURBO_PATH",
+                "Comfy-Org/Qwen-Image-2.1/diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors",
+            ),
             "quantize": True,
             "quantize_te": True,
             "model_kwargs": {"turbo": True},
+        },
+        "xpu_model": {
+            "name_or_path": os.environ.get(
+                "QWEN_TURBO_PATH",
+                "Comfy-Org/Qwen-Image-2.1/diffusion_models/qwen_image_2.1_turbo_bf16.safetensors",
+            ),
+            "quantize": True,
+            "qtype": "xpu_int8",
+            "quantize_te": True,
+            "qtype_te": "xpu_int8",
+            "layer_offloading": True,
+            "layer_offloading_transformer_percent": 1.0,
+            "layer_offloading_text_encoder_percent": 1.0,
+            "assistant_lora_path": os.environ.get(
+                "QWEN_TURBO_ADAPTER_PATH",
+                "ostris/qwen_image_2_turbo_training_adapter/qwen_image_2_turbo_training_adapter_v1.safetensors",
+            ),
+            "model_kwargs": {"turbo": True, "rgba": False},
         },
         "sample": {**IMG, "num_inference_steps": 8, "guidance_scale": 1.0},
         "needs_control_image": True,
@@ -223,6 +256,14 @@ MODEL_TESTS = {
             "qtype": "convrot8",
             "qtype_te": "convrot8",
         },
+        "xpu_model": {
+            "qtype": "xpu_int8",
+            "qtype_te": "xpu_int8",
+            "layer_offloading": True,
+            "layer_offloading_transformer_percent": 1.0,
+            "layer_offloading_text_encoder_percent": 1.0,
+            "model_kwargs": {"uncond_skip_layers": [22]},
+        },
         # vendor defaults are 50 steps, CFG 3 (negative branch skips block 22)
         "sample": {**IMG, "num_inference_steps": 20, "guidance_scale": 3.0},
     },
@@ -234,6 +275,14 @@ MODEL_TESTS = {
             "quantize_te": True,
             "qtype": "convrot8",
             "qtype_te": "convrot8",
+        },
+        "xpu_model": {
+            "qtype": "xpu_int8",
+            "qtype_te": "xpu_int8",
+            "layer_offloading": True,
+            "layer_offloading_transformer_percent": 1.0,
+            "layer_offloading_text_encoder_percent": 1.0,
+            "model_kwargs": {"uncond_skip_layers": [22]},
         },
         "sample": {**IMG, "num_inference_steps": 20, "guidance_scale": 3.0},
     },
@@ -248,6 +297,19 @@ MODEL_TESTS = {
             "qtype_te": "convrot8",
             "model_kwargs": {"edit": True, "kv_cache": True, "match_target_res": True},
         },
+        "xpu_model": {
+            "qtype": "xpu_int8",
+            "qtype_te": "xpu_int8",
+            "layer_offloading": True,
+            "layer_offloading_transformer_percent": 1.0,
+            "layer_offloading_text_encoder_percent": 1.0,
+            "model_kwargs": {
+                "edit": True,
+                "kv_cache": True,
+                "match_target_res": True,
+                "uncond_skip_layers": [22],
+            },
+        },
         "sample": {**IMG, "num_inference_steps": 20, "guidance_scale": 3.0},
         "needs_control_image": True,
     },
@@ -261,6 +323,19 @@ MODEL_TESTS = {
             "qtype": "convrot8",
             "qtype_te": "convrot8",
             "model_kwargs": {"edit": True, "kv_cache": True, "match_target_res": True},
+        },
+        "xpu_model": {
+            "qtype": "xpu_int8",
+            "qtype_te": "xpu_int8",
+            "layer_offloading": True,
+            "layer_offloading_transformer_percent": 1.0,
+            "layer_offloading_text_encoder_percent": 1.0,
+            "model_kwargs": {
+                "edit": True,
+                "kv_cache": True,
+                "match_target_res": True,
+                "uncond_skip_layers": [22],
+            },
         },
         "sample": {**IMG, "num_inference_steps": 20, "guidance_scale": 3.0},
         "needs_control_image": True,
@@ -351,6 +426,8 @@ def run_one(
 
     # quantization always tests the convrot8 backend (per-entry override wins)
     model_kwargs = dict(entry["model"])
+    if str(device).startswith("xpu"):
+        model_kwargs.update(entry.get("xpu_model", {}))
     if qtype_override:
         # quant smoke: force quantization of transformer + TE at this qtype
         model_kwargs["quantize"] = True

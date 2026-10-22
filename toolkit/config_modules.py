@@ -1055,8 +1055,14 @@ class DatasetConfig:
         # Opt in if you have stable VRAM headroom and want the transfer speedup.
         self.pin_memory: bool = kwargs.get('pin_memory', False)
         # threads that decode/resize the images of one bucketed batch concurrently inside a
-        # dataloader worker; 0 or 1 loads the batch serially
-        self.batch_load_threads: int = kwargs.get('batch_load_threads', min(8, os.cpu_count() or 1))
+        # dataloader worker; 0 or 1 loads the batch serially. Keep the XPU default
+        # conservative because layer offloading already competes for CPU bandwidth.
+        on_xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
+        default_batch_load_threads = min(
+            2 if on_xpu else 8,
+            os.cpu_count() or 1,
+        )
+        self.batch_load_threads: int = kwargs.get('batch_load_threads', default_batch_load_threads)
         # threads used to prep (decode/resize) items ahead of the VAE while caching latents
         self.cache_latents_num_workers: int = kwargs.get('cache_latents_num_workers', min(6, os.cpu_count() or 1))
         self.extra_values: List[float] = kwargs.get('extra_values', [])

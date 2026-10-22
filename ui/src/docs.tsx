@@ -221,7 +221,7 @@ const docs: { [key: string]: ConfigDoc } = {
     ),
   },
   'train.pool_datasets': {
-    title: 'Pool Datasets',
+    title: '合并数据集',
     description: (
       <>
         Off by default. Only useful when you have numerous datasets.

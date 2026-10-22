@@ -1,0 +1,77 @@
+# MOSS-Image SFT 编辑训练，A770 16GB 模板。
+# 数据集与 control_dataset 必须一一对应；参考图的文本嵌入依赖控制图，
+# 因此文本编码器不能像普通文生图那样在缓存后彻底卸载。
+---
+job: extension
+config:
+  name: moss_sft_edit_xpu
+  process:
+    - type: sd_trainer
+      training_folder: "output"
+      disable_sampling: false
+      device: xpu
+      network:
+        type: lora
+        linear: 16
+        linear_alpha: 16
+      save:
+        dtype: float16
+        save_every: 250
+        max_step_saves_to_keep: 4
+      datasets:
+        - folder_path: "/path/to/your/targets"
+          control_path: "/path/to/your/references"
+          caption_ext: txt
+          caption_dropout_rate: 0.0
+          cache_latents_to_disk: true
+          cache_text_embeddings: false
+          resolution: [512]
+          num_repeats: 1
+      train:
+        batch_size: 1
+        steps: 1500
+        gradient_accumulation_steps: 1
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true
+        unload_text_encoder: false
+        noise_scheduler: flowmatch
+        optimizer: adamw8bit
+        lr: 1e-4
+        dtype: bf16
+      logging:
+        use_ui_logger: true
+        log_every: 1
+      model:
+        name_or_path: "OpenMOSS-Team/MOSS-Image-SFT"
+        arch: moss_image:edit
+        quantize: true
+        qtype: xpu_int8
+        quantize_te: true
+        qtype_te: xpu_int8
+        layer_offloading: true
+        layer_offloading_transformer_percent: 1.0
+        layer_offloading_text_encoder_percent: 1.0
+        low_vram: false
+        model_kwargs:
+          edit: true
+          kv_cache: true
+          match_target_res: true
+          uncond_skip_layers: [22]
+      sample:
+        sampler: flowmatch
+        sample_every: 250
+        sample_start_step: 250
+        width: 512
+        height: 512
+        prompts:
+          - "turn the reference into a cinematic mountain temple at dawn"
+        ctrl_img: "/path/to/reference.png"
+        neg: ""
+        seed: 42
+        walk_seed: false
+        guidance_scale: 3.0
+        sample_steps: 30
+  meta:
+    name: "[name]"
+    version: "1.0"

@@ -59,7 +59,7 @@ UNMANAGED_MODULES_INCLUDES = ["RotaryEmbedding", "Norm", "RotaryPosEmbed"]
 # .to(device)，这类裸参数没人搬 -> "found at least two devices, xpu:0 and cpu"。
 # 这里把命中的模块的**直接**参数/缓冲登记为 unmanaged（跟着模型整体走），
 # 它的子模块仍按常规流程处理。
-UNMANAGED_PARAM_MODULES_INCLUDES = ["GatedDeltaNet"]
+UNMANAGED_PARAM_MODULES_INCLUDES = ["GatedDeltaNet", "BlockModulation"]
 
 
 class MemoryManager:

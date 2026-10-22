@@ -6,8 +6,8 @@ transformer", "Quantizing (convrot8)", "Loading VAE", ... — opens a new
 stage). For every stage it records:
 
   - seconds          wall time
-  - vram_peak_gb     torch.cuda.max_memory_allocated during the stage
-  - vram_reserved_gb torch.cuda.max_memory_reserved during the stage
+  - vram_peak_gb     backend max_memory_allocated during the stage
+  - vram_reserved_gb backend max_memory_reserved during the stage
   - vram_end_gb      memory_allocated at the stage boundary (resident model)
   - rss_peak_gb      peak process RSS (sampled at 50ms)
   - cpu_avg_pct /    process CPU utilization (100 = one full core), sampled
@@ -75,15 +75,21 @@ class _Sampler:
 
 class StageProfiler:
     def __init__(self, device):
-        self.device = torch.device(device) if torch.cuda.is_available() else None
+        self.device = torch.device(device)
+        if self.device.type == "cuda" and torch.cuda.is_available():
+            self.backend = torch.cuda
+        elif self.device.type == "xpu" and hasattr(torch, "xpu") and torch.xpu.is_available():
+            self.backend = torch.xpu
+        else:
+            self.backend = None
         self.stages = []
         self._current = None
         self._sampler = _Sampler()
 
     def _cuda_sync_reset(self):
-        if self.device is not None:
-            torch.cuda.synchronize(self.device)
-            torch.cuda.reset_peak_memory_stats(self.device)
+        if self.backend is not None:
+            self.backend.synchronize(self.device)
+            self.backend.reset_peak_memory_stats(self.device)
 
     def stage(self, name: str):
         """Close the current stage (if any) and open a new one."""
@@ -99,16 +105,16 @@ class StageProfiler:
         self._current = None
         seconds = time.perf_counter() - cur["t0"]
         entry = {"name": cur["name"], "seconds": round(seconds, 3)}
-        if self.device is not None:
-            torch.cuda.synchronize(self.device)
+        if self.backend is not None:
+            self.backend.synchronize(self.device)
             entry["vram_peak_gb"] = round(
-                torch.cuda.max_memory_allocated(self.device) / _GB, 3
+                self.backend.max_memory_allocated(self.device) / _GB, 3
             )
             entry["vram_reserved_gb"] = round(
-                torch.cuda.max_memory_reserved(self.device) / _GB, 3
+                self.backend.max_memory_reserved(self.device) / _GB, 3
             )
             entry["vram_end_gb"] = round(
-                torch.cuda.memory_allocated(self.device) / _GB, 3
+                self.backend.memory_allocated(self.device) / _GB, 3
             )
         entry.update(self._sampler.stats())
         self.stages.append(entry)

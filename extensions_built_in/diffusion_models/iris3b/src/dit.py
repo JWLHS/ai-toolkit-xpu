@@ -1018,7 +1018,17 @@ class IrisDiT(nn.Module, OstrisModelMixin):
 
     def get_offload_ignore_modules(self):
         # tiny live state every block reads: keep resident
-        return [self.t_embedder, self.modulation_cores, self.s_embedder, self.final_layer]
+        # y_pos_embedding is a root-level bare Parameter; without registering it
+        # here, layer offloading leaves it on CPU and the text adapter adds XPU
+        # and CPU tensors directly.
+        keep = [
+            self.t_embedder,
+            self.modulation_cores,
+            self.s_embedder,
+            self.final_layer,
+            self.y_pos_embedding,
+        ]
+        return [x for x in keep if x is not None]
 
     # -- rope caches -----------------------------------------------------------
     def _fetch_rope_img(self, grid, device):

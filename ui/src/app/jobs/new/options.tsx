@@ -61,6 +61,7 @@ export interface SampleTags {
 export interface ModelArch {
   name: string;
   label: string;
+  generateNameOverride?: string;
   group: ModelGroup;
   controls?: Control[];
   isVideoModel?: boolean;
@@ -535,7 +536,13 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].network.network_kwargs.ignore_if_contains': [['layers.22.'], []],
     },
     disableSections: ['network.conv'],
-    additionalSections: ['model.layer_offloading', 'model.low_vram'],
+    additionalSections: [
+      'datasets.multi_control_paths',
+      'sample.multi_ctrl_imgs',
+      'model.layer_offloading',
+      'model.low_vram',
+      'model.qie.match_target_res',
+    ],
   },
   {
     name: 'moss_image:edit',
