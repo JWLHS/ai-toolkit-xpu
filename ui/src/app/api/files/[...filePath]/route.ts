@@ -6,7 +6,7 @@ import { Readable } from 'stream';
 import { getDatasetsRoot, getTrainingFolder } from '@/server/settings';
 import { catchAllToFilePath } from '@/server/catchAllPath';
 
-export async function GET(request: NextRequest, { params }: { params: { filePath: string | string[] } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ filePath: string | string[] }> }) {
   const { filePath } = await params;
   try {
     // Segments are already URL-decoded by Next.js; accepts both the legacy

@@ -160,6 +160,8 @@ FIBO 的 XPU 适配与上游代码分开保留，后续同步时不要用上游�
    `Fibo2Perceiver` 登记到 `UNMANAGED_PARAM_MODULES_INCLUDES`。
 3. UI 新增中文 `FIBO 2.0 Dev（文生图 / 编辑训练）`，默认
    `xpu_int8` + 100% transformer/TE 层级卸载；有 control 图走编辑，无 control 图走文生图。
+   同时把 Next.js 15 的动态路由 `params` 全部改成 `Promise` 类型，并移除
+   `ignoreBuildErrors`；主 `tsc --noEmit` 和 Next 生产构建均通过。
 4. 示例配置：`config/examples/train_lora_fibo2_xpu_a770.yaml`。
 
 **A770 16GB 实测（torch 2.13.0+xpu、`omni_xpu_kernel 0.2.0b1+torch213.dg2.2`、
@@ -173,10 +175,9 @@ FIBO 的 XPU 适配与上游代码分开保留，后续同步时不要用上游�
 | 显存 | 采样峰值分配 **7.69GB**、峰值保留 **8.80GB**；结束后保留池回收到 1.56GB |
 | 编辑训练 | 1 步真实反向/优化器更新，**17.64 s/it**，loss **0.7477** |
 | LoRA | 261 个目标模块、522 个张量、29.3MB；全部 finite，261 个 `lora_B` 均已更新 |
-| UI | 新增中文入口；`localize_ui.py --check` 确认没有待应用词典变更 |
+| UI | 新增中文入口；`localize_ui.py --check` 无待应用变更；`tsc --noEmit` 与 Next 生产构建通过 |
 
 采样输出经过实际文件检查，并非只验证进程退出；训练后预览图也正常生成。
-本轮环境没有 Node，因此没做生产构建，仅完成本地化脚本与源码结构检查。
 
 ### Ming-Image（`77847d7` + `460c29b`）— 已合并，未实测
 

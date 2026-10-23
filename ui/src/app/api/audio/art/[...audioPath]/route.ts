@@ -126,7 +126,7 @@ function extractArtFromTag(buf: Buffer): ArtResult {
   return null;
 }
 
-export async function GET(request: NextRequest, { params }: { params: { audioPath: string | string[] } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ audioPath: string | string[] }> }) {
   const { audioPath } = await params;
   try {
     // Segments are already URL-decoded by Next.js; accepts both the legacy

@@ -16,13 +16,6 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: appVersion(),
   },
-  devIndicators: {
-    buildActivity: false,
-  },
-  typescript: {
-    // Remove this. Build fails because of route types
-    ignoreBuildErrors: true,
-  },
   experimental: {
     serverActions: {
       bodySizeLimit: '100mb',

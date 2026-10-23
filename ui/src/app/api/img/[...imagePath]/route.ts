@@ -30,7 +30,7 @@ const contentTypeMap: { [key: string]: string } = {
   '.ogg': 'audio/ogg',
 };
 
-export async function GET(request: NextRequest, { params }: { params: { imagePath: string | string[] } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ imagePath: string | string[] }> }) {
   const { imagePath } = await params;
   try {
     // Segments are already URL-decoded by Next.js; accepts both the legacy
