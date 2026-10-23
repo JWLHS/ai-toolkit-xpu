@@ -1,7 +1,7 @@
 # 上游跟进状态（ai-toolkit → ai-toolkit-xpu）
 
 本 fork 的基线：后端代码 `0.12.27`，UI 同步到上游 `0.13.6`（中文词条见 `ui_i18n/`）。
-上游仓库：<https://github.com/ostris/ai-toolkit>（本文件记录最后一次核对：**2026-10-23**，上游 HEAD `14f8f95`）。
+上游仓库：<https://github.com/ostris/ai-toolkit>（本文件记录最后一次核对：**2026-10-24**，上游 HEAD `7861f92b`）。
 
 合并原则：**只手工挑后端能安全落地的提交**。上游近期的模型支持大量依赖新的
 `toolkit/models/v2/` 模型栈（我们这条线只有 9 个文件的旧版、上游已有 40 个），
@@ -143,6 +143,28 @@ UI 已加 `FLUX.3 Image Klein（文生图）` 入口（默认 xpu_int8 + 层级�
 > 待办：`ace_step`（音频）的 DiT 里也有 `nn.Conv1d`（patchify），开层级卸载时会遇到与
 > Conv1d 相同的场景——它现在已因为上面的登记而受益，但值得单独跑一轮验证。
 
+### FIBO 2.0 Dev 与 MOSS VAE 解码（2026-10-24）— **已合并，FIBO 待真机验证**
+
+| 上游提交 | 内容 | 本 fork 状态 |
+| --- | --- | --- |
+| `7cc9fef4` | 新增 Bria FIBO 2.0 Dev，支持文生图与参考图编辑训练 | 已完整合并；13 个模型/注册/测试文件，UI 按本 fork 的旧版页面结构手工移植 |
+| `7861f92b` | 移除 MOSS VAE decode 的强制 `no_grad`，供 DFE 使用 | 已合并；与 XPU 训练路径不冲突 |
+
+FIBO 的 XPU 适配与上游代码分开保留，后续同步时不要用上游文件覆盖：
+
+1. `fibo2/src/transformer.py::_rope()` 在设备上创建 fp64 频率表，XPU 不支持 fp64。
+   改为 `rope_dtype(ids.device)`：XPU 用 fp32，CPU/CUDA 继续用 fp64。
+2. FIBO 的注入层把 `cross_attn_gate` 直接挂在 block 上，Perceiver 把
+   `latent_queries` 直接挂在自身；层级卸载时这些裸参数原本不会被搬运，会触发
+   `found at least two devices, xpu:0 and cpu`。已把 `Fibo2Block` /
+   `Fibo2Perceiver` 登记到 `UNMANAGED_PARAM_MODULES_INCLUDES`。
+3. UI 新增中文 `FIBO 2.0 Dev（文生图 / 编辑训练）`，默认
+   `xpu_int8` + 100% transformer/TE 层级卸载；有 control 图走编辑，无 control 图走文生图。
+4. 示例配置：`config/examples/train_lora_fibo2_xpu_a770.yaml`。
+
+本轮只在 D 盘同步工作区做代码级检查。由于没有把 FIBO 权重和环境放入该工作区，
+**尚未做 A770 真机加载/采样/训练验证**；README 和 UI 不把它标成“已实测”。
+
 ### Ming-Image（`77847d7` + `460c29b`）— 已合并，未实测
 
 - 代码、v2 依赖、UI 入口都已就位（`Ming-Image 0.1 Design（MoE·实验）`），
@@ -235,6 +257,8 @@ UI 已加 `FLUX.3 Image Klein（文生图）` 入口（默认 xpu_int8 + 层级�
 1. `git clone https://github.com/ostris/ai-toolkit` 到临时目录并 `git fetch`；
 2. 拉出 `origin/main` 的工作树（`git worktree add --detach <dir> <sha>`）；
 3. 用"提交级 diff + `git apply`"逐个试；**新增目录直接 copy**，改动核心文件的按 hunk 手工过；
+   新增模型如果带 `extensions_built_in/diffusion_models/ui.tsx`，不要整文件覆盖，
+   要移植到本 fork 的 `ui/src/app/jobs/new/options.tsx`；
 4. 冲突集中在这些文件（本 fork 的 XPU 补丁所在地）：
    `toolkit/memory_management/manager.py`、`manager_modules.py`、`toolkit/optimizer.py`、
    `toolkit/custom_adapter.py`、`toolkit/stable_diffusion_model.py`、`toolkit/models/base_model.py`、

@@ -24,6 +24,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 
+from toolkit.device_utils import rope_dtype
 from toolkit.models.v2._mixin import OstrisModelMixin
 
 ADALN_DIM = 256
@@ -153,7 +154,7 @@ class _FeedForward(nn.Module):
         return self.w2(F.silu(gate) * up)
 
 
-class _Block(nn.Module):
+class Fibo2Block(nn.Module):
     """Z-Image's block; an injection block also cross-attends to its bundle."""
 
     def __init__(self, p: Fibo2Params, injection: bool):
@@ -212,7 +213,7 @@ class _PerceiverLayer(nn.Module):
         return x + self.ffn(self.ffn_norm(x))
 
 
-class _Perceiver(nn.Module):
+class Fibo2Perceiver(nn.Module):
     def __init__(self, p: Fibo2Params):
         super().__init__()
         self.latent_queries = nn.Parameter(torch.zeros(p.max_gist_tokens, p.dim))
@@ -314,11 +315,11 @@ class Fibo2Transformer(nn.Module, OstrisModelMixin):
         self.x_embedder = nn.Linear(p.in_channels, p.dim, bias=True)
         self.t_embedder = _TimestepEmbedder()
         self.noise_refiner = nn.ModuleList(
-            [_Block(p, False) for _ in range(p.n_refiner_layers)]
+            [Fibo2Block(p, False) for _ in range(p.n_refiner_layers)]
         )
-        self.perceiver = _Perceiver(p)
+        self.perceiver = Fibo2Perceiver(p)
         self.layers = nn.ModuleList(
-            [_Block(p, i in p.injection_layers) for i in range(p.n_layers)]
+            [Fibo2Block(p, i in p.injection_layers) for i in range(p.n_layers)]
         )
         self.final_layer = _FinalLayer(p.dim, p.in_channels)
         self.gradient_checkpointing = False
@@ -346,13 +347,16 @@ class Fibo2Transformer(nn.Module, OstrisModelMixin):
     def _rope(self, ids: torch.Tensor):
         """(L, 3) integer positions -> (cos, sin), each (1, L, 1, head_dim / 2)
         fp32; phases in fp64 like diffusers' precomputed tables."""
+        phase_dtype = rope_dtype(ids.device)
         angles = []
         for i, d in enumerate(self.params.axes_dims):
             freqs = 1.0 / (
                 self.params.rope_theta
-                ** (torch.arange(0, d, 2, dtype=torch.float64, device=ids.device) / d)
+                ** (torch.arange(0, d, 2, dtype=phase_dtype, device=ids.device) / d)
             )
-            angles.append(torch.outer(ids[:, i].double(), freqs).float())
+            angles.append(
+                torch.outer(ids[:, i].to(phase_dtype), freqs).float()
+            )
         angles = torch.cat(angles, -1)[None, :, None]
         return angles.cos(), angles.sin()
 

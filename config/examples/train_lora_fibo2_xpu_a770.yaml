@@ -1,0 +1,80 @@
+# FIBO 2.0 Dev（文生图 / 编辑训练）在 Intel Arc A770 16GB 上的模板。
+#
+# 编辑训练：保留 datasets[0].control_path，目标图与参考图按文件名配对。
+# 文生图训练：删除 control_path，并把 train.unload_text_encoder 改为 true。
+#
+# 权重来源 Comfy-Org/Fibo-2.0。程序优先复用 MODELS_PATH 下已有的 Comfy
+# 单文件；缺失的小配置/tokenizer 由 HF 镜像或官方源提供。
+---
+job: extension
+config:
+  name: fibo2_xpu
+  process:
+    - type: sd_trainer
+      training_folder: "output"
+      disable_sampling: false
+      device: xpu
+      network:
+        type: lora
+        linear: 16
+        linear_alpha: 16
+      save:
+        dtype: float16
+        save_every: 500
+        max_step_saves_to_keep: 4
+      datasets:
+        - folder_path: "/path/to/your/target_images"
+          control_path: "/path/to/your/reference_images"
+          caption_ext: txt
+          caption_dropout_rate: 0.05
+          cache_latents_to_disk: true
+          cache_text_embeddings: true
+          resolution:
+            - 512
+            - 768
+          num_repeats: 1
+      train:
+        batch_size: 1
+        steps: 1500
+        gradient_accumulation_steps: 1
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true
+        unload_text_encoder: false
+        noise_scheduler: flowmatch
+        optimizer: adamw8bit
+        lr: 1e-4
+        dtype: bf16
+      logging:
+        use_ui_logger: true
+        log_every: 1
+      model:
+        name_or_path: "Comfy-Org/Fibo-2.0"
+        arch: fibo2
+        quantize: true
+        qtype: xpu_int8
+        quantize_te: true
+        qtype_te: xpu_int8
+        layer_offloading: true
+        layer_offloading_transformer_percent: 1.0
+        layer_offloading_text_encoder_percent: 1.0
+        low_vram: false
+        model_kwargs:
+          match_target_res: true
+      sample:
+        sampler: flowmatch
+        sample_every: 500
+        sample_start_step: 500
+        width: 768
+        height: 768
+        prompts:
+          - "a cinematic photo of a mountain temple at dawn"
+        ctrl_img: "/path/to/your/reference.png"
+        neg: ""
+        seed: 42
+        walk_seed: false
+        guidance_scale: 5.0
+        sample_steps: 30
+  meta:
+    name: "[name]"
+    version: "1.0"

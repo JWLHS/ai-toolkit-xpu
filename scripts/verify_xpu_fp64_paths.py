@@ -123,6 +123,21 @@ def check_model_rope():
 
     run("minimax_h3 position_ids 搬运", minimax)
 
+    # fibo2 rope（不再在 XPU 上创建 fp64 频率表）
+    def fibo2():
+        from types import SimpleNamespace
+
+        from extensions_built_in.diffusion_models.fibo2.src.transformer import (
+            Fibo2Params,
+            Fibo2Transformer,
+        )
+
+        params = Fibo2Params(axes_dims=(32, 48, 48), rope_theta=256.0)
+        ids = torch.zeros(8, 3, dtype=torch.long, device=dev)
+        return Fibo2Transformer._rope(SimpleNamespace(params=params), ids)[0]
+
+    run("fibo2.rope", fibo2)
+
     # wan21 rotary（view_as_complex 路径）
     def wan():
         x = torch.randn(1, 8, 16, 64, dtype=torch.bfloat16, device=dev)

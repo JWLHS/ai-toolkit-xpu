@@ -108,6 +108,11 @@ MOSS-Image SFT Edit 均已在 A770 上实测通过**
 MOSS-Image 512 档 5.9~7.8 s/it、峰值 8.8GB）。Qwen Turbo 的训练需要单独的官方
 training adapter；MOSS SFT Edit 的支持图与目标图按文件名配对。
 
+**FIBO 2.0 Dev** 已跟进上游并完成 XPU 代码适配（XPU fp32 RoPE、100% 层级卸载、
+`xpu_int8` 默认项、中文 UI 和 [A770 配置模板](config/examples/train_lora_fibo2_xpu_a770.yaml)），
+但本轮没有真机权重，**尚未宣称 A770 实测通过**。此外已同步上游 MOSS VAE decode 的
+DFE 修复（移除强制 `no_grad`）。
+
 Iris-3B 的 XPU int8 生成和短训练也已验证，但它目前不属于 ComfyUI 核心模型，
 本仓库只保证 ai-toolkit 训练链路的兼容性。Ming-Image 已接入但本机无权重、未实测。
 详见 [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md)。
@@ -153,6 +158,7 @@ torchao int8 并在日志里给出原因，训练不会失败。
   UI 代码本体同步到官方 0.13.6，后续跟版只补词典
 - 修复 XPU 显存一直涨/溢出到共享显存（分块搬运 + 分配器缓存回收），
   以及 XPU 不支持 fp64 的算子路径（rope 等改为 fp32）
+- 跟进上游 FIBO 2.0 Dev（文生图/编辑训练）及 MOSS VAE DFE 解码修复
 - 移除 `docker/`：本 fork 的依赖文件面向 XPU，容器（NVIDIA/CUDA）部署请用上游仓库
 
 文档：

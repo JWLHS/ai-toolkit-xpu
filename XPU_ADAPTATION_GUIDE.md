@@ -221,6 +221,23 @@ Ming-Image 同样已接入（UI 里 `Ming-Image 0.1 Design（MoE·实验）`）�
 先从官方挑对应提交，再接 `component_load_kwargs` / `MemoryManager`，最后跑
 `py_compile`、模型加载、2 步前向和一次短训练。H3 和 Qwen3.8 不在本轮 XPU 适配范围内。
 
+### 5.7 FIBO 2.0 Dev（已适配，待 A770 真机验证）
+
+FIBO 2.0 的上游实现有两类 XPU 专用改动：
+
+1. `fibo2/src/transformer.py::_rope()` 原本在目标设备创建 fp64 频率表；现在通过
+   `toolkit.device_utils.rope_dtype()` 让 XPU/MPS 使用 fp32，CPU/CUDA 保持 fp64。
+2. 层级卸载管理的是 Linear/Conv 子模块，但 FIBO 在每个注入 block 上直接挂了
+   `cross_attn_gate`，Perceiver 上直接挂了 `latent_queries`。这些裸 `nn.Parameter`
+   必须登记为 unmanaged 参数，否则 100% 卸载时会出现 CPU/XPU 混设备。已在
+   `toolkit/memory_management/manager.py` 登记 `Fibo2Block` / `Fibo2Perceiver`，
+   它们的线性子层仍然逐层搬运。
+
+UI 入口是 `FIBO 2.0 Dev（文生图 / 编辑训练）`，默认 `xpu_int8`、Transformer/TE
+各 100% 层级卸载；有 control 图时自动走编辑训练。A770 模板见
+`config/examples/train_lora_fibo2_xpu_a770.yaml`。首次真机验证至少应覆盖：
+模型加载、512/768 两步采样、编辑参考图、LoRA 一步反向和 checkpoint 保存。
+
 ## 6. 曲线图与汉化 UI
 
 链路：训练器 → `UILogger` → `output/<任务>/loss_log.db` → `/api/jobs/[id]/loss` → uPlot。
@@ -251,9 +268,10 @@ cd ui && npm start                          # 中文 UI + 曲线图
   `toolkit/device_utils.py` 提供 `rope_dtype(device)` 与 `adjust_dtype_for_device(dtype, device)`
   （XPU/MPS → float32，其余 → float64），已改的地点包括
   chroma `rope`、hidream `rope`/`expand_timesteps`、boogu_image `get_freqs_cis`、omnigen2 `get_freqs_cis`、
-  zeta_chroma 时间步、prx_pixel_t2i 的 `maybe_adjust_dtype_for_device`、wan21 rotary、krea2 `rope`、flux3 `rope`；
+  zeta_chroma 时间步、prx_pixel_t2i 的 `maybe_adjust_dtype_for_device`、wan21 rotary、krea2 `rope`、flux3 `rope`、
+  fibo2 `rope`；
   minimax_h3 的位置网格在 CPU 上以 float64 构建（保证网格精度），**搬运到设备时降为 float32**。
-  回归验证脚本：`scripts/verify_xpu_fp64_paths.py`（助手行为 + 前提确认 + 6 条模型路径实测）。
+  回归验证脚本：`scripts/verify_xpu_fp64_paths.py`（助手行为 + 前提确认 + 7 条模型路径实测）。
 - **环境用 uv 还是 pip？** 推荐 **uv**：`pyproject.toml` + `uv.lock` + `.python-version` 即环境定义，
   `uv sync` 幂等安装、`uv python pin 3.13` 换版本、备份只需几个 KB 文件。
   XPU 轮子通过 `[[tool.uv.index]]`（`explicit = true`）+ `[tool.uv.sources]` 精确指向，

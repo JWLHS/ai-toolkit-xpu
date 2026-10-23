@@ -582,6 +582,43 @@ export const modelArchs: ModelArch[] = [
     ],
   },
   {
+    name: 'fibo2',
+    label: 'FIBO 2.0 Dev（文生图 / 编辑训练）',
+    group: 'image',
+    gateUrl: 'https://huggingface.co/Comfy-Org/Fibo-2.0',
+    defaults: {
+      // Comfy-Org 重打包同时提供 DiT 与 Qwen3-VL-4B 文本编码器；
+      // 本地已有 Comfy 单文件时优先复用。
+      'config.process[0].model.name_or_path': ['Comfy-Org/Fibo-2.0', defaultNameOrPath],
+      'config.process[0].model.quantize': [true, false],
+      // XPU 默认 omni int8；未安装内核时自动回退 torchao int8。
+      'config.process[0].model.qtype': ['xpu_int8', 'xpu_int8'],
+      'config.process[0].model.quantize_te': [true, false],
+      'config.process[0].model.qtype_te': ['xpu_int8', 'xpu_int8'],
+      'config.process[0].model.low_vram': [false, false],
+      'config.process[0].train.unload_text_encoder': [false, false],
+      'config.process[0].sample.sampler': ['flowmatch', 'flowmatch'],
+      'config.process[0].train.noise_scheduler': ['flowmatch', 'flowmatch'],
+      'config.process[0].train.timestep_type': ['weighted', 'sigmoid'],
+      'config.process[0].sample.width': [1024, 1024],
+      'config.process[0].sample.height': [1024, 1024],
+      // 官方采样参数：CFG 5、30 步；编辑训练时参考图按目标分辨率处理。
+      'config.process[0].sample.guidance_scale': [5, 4],
+      'config.process[0].sample.sample_steps': [30, 25],
+      'config.process[0].model.model_kwargs': [{ match_target_res: true }, {}],
+    },
+    disableSections: ['network.conv', 'train.unload_text_encoder'],
+    // 有控制图时走编辑训练；没有控制图时训练文生图能力。
+    additionalSections: [
+      'datasets.multi_control_paths',
+      'sample.multi_ctrl_imgs',
+      'model.qie.match_target_res',
+      'model.layer_offloading',
+      'model.low_vram',
+    ],
+    hasMultiLinePrompts: true,
+  },
+  {
     name: 'flux3',
     label: 'FLUX.3 Image Klein（文生图）',
     group: 'image',

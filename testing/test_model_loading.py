@@ -361,6 +361,13 @@ MODEL_TESTS = {
             "qtype": "convrot8",
             "qtype_te": "convrot8",
         },
+        "xpu_model": {
+            "qtype": "xpu_int8",
+            "qtype_te": "xpu_int8",
+            "layer_offloading": True,
+            "layer_offloading_transformer_percent": 1.0,
+            "layer_offloading_text_encoder_percent": 1.0,
+        },
         # vendor defaults are 30 steps, CFG 5
         "sample": {**IMG, "num_inference_steps": 20, "guidance_scale": 5.0},
     },
@@ -372,6 +379,14 @@ MODEL_TESTS = {
             "quantize_te": True,
             "qtype": "convrot8",
             "qtype_te": "convrot8",
+        },
+        "xpu_model": {
+            "qtype": "xpu_int8",
+            "qtype_te": "xpu_int8",
+            "layer_offloading": True,
+            "layer_offloading_transformer_percent": 1.0,
+            "layer_offloading_text_encoder_percent": 1.0,
+            "model_kwargs": {"match_target_res": True},
         },
         "sample": {**IMG, "num_inference_steps": 20, "guidance_scale": 5.0},
         "needs_control_image": True,
