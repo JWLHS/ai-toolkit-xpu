@@ -224,23 +224,13 @@ const docs: { [key: string]: ConfigDoc } = {
     title: '合并数据集',
     description: (
       <>
-        Off by default. Only useful when you have numerous datasets.
+        默认关闭。把多个数据集的图片合并到同一组分桶中，让同一桶里的图片可以混合成一个批次，同时只使用一组数据加载线程。
         <br />
         <br />
-        Normally every dataset is loaded as its own unit with its own buckets, so each batch is built from a single
-        dataset and each dataset keeps its own loader threads. With many datasets this means batches never mix images
-        from different folders and the number of loader threads grows with the dataset count.
+        适合数据集目录很多的情况。每个数据集仍保留自己的标注、控制图、重复次数、翻转和分辨率设置；如果两个数据集的批次字段不兼容（例如控制图数量不同、视频与图片混用或缓存配置不同），系统仍会把它们分到不同桶中。混合后的所有数据集必须使用相同的 batch size。
         <br />
         <br />
-        Pooling merges all of your datasets into one shared set of buckets. Images from different folders that land in
-        the same bucket are mixed together in the same batch, and only one set of loader threads is used for the whole
-        pool. Regularization datasets are pooled separately from your training datasets, never together.
-        <br />
-        <br />
-        Each dataset keeps its own settings (captions, control images, repeats, flips, scale, resolution). Datasets whose
-        settings would not collate into one batch (for example a different number of control images, video vs image,
-        or different caching) are automatically kept in separate buckets within the pool. All pooled datasets must use
-        the same batch size.
+        XPU 层级卸载会占用 CPU 搬运模型权重。开启此功能后如果 CPU 负载过高，可把每个数据集的 batch_load_threads 调低到 1～2。
       </>
     ),
   },
@@ -313,7 +303,7 @@ const docs: { [key: string]: ConfigDoc } = {
     ),
   },
   'config.process[0].caption.caption_prompt': {
-    title: 'Caption Prompt',
+    title: '标注提示词',
     description: (
       <>
         The instruction sent to the captioning model for every file. It can contain special tokens that are replaced

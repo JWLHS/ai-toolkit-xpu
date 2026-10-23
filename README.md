@@ -109,9 +109,11 @@ MOSS-Image 512 档 5.9~7.8 s/it、峰值 8.8GB）。Qwen Turbo 的训练需要�
 training adapter；MOSS SFT Edit 的支持图与目标图按文件名配对。
 
 **FIBO 2.0 Dev** 已跟进上游并完成 XPU 代码适配（XPU fp32 RoPE、100% 层级卸载、
-`xpu_int8` 默认项、中文 UI 和 [A770 配置模板](config/examples/train_lora_fibo2_xpu_a770.yaml)），
-但本轮没有真机权重，**尚未宣称 A770 实测通过**。此外已同步上游 MOSS VAE decode 的
-DFE 修复（移除强制 `no_grad`）。
+`xpu_int8` 默认项、中文 UI 和 [A770 配置模板](config/examples/train_lora_fibo2_xpu_a770.yaml)）。
+在 A770 16GB 上复用本地 ComfyUI 权重实测通过：384 档文生图/编辑图均 2 步完成，
+编辑训练 1 步 `17.64 s/it`、loss `0.7477`，LoRA 与 optimizer 正常保存；采样峰值分配
+约 `7.69GB`、峰值保留约 `8.80GB`。此外已同步上游 MOSS VAE decode 的 DFE 修复
+（移除强制 `no_grad`）。
 
 Iris-3B 的 XPU int8 生成和短训练也已验证，但它目前不属于 ComfyUI 核心模型，
 本仓库只保证 ai-toolkit 训练链路的兼容性。Ming-Image 已接入但本机无权重、未实测。

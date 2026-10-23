@@ -221,7 +221,7 @@ Ming-Image 同样已接入（UI 里 `Ming-Image 0.1 Design（MoE·实验）`）�
 先从官方挑对应提交，再接 `component_load_kwargs` / `MemoryManager`，最后跑
 `py_compile`、模型加载、2 步前向和一次短训练。H3 和 Qwen3.8 不在本轮 XPU 适配范围内。
 
-### 5.7 FIBO 2.0 Dev（已适配，待 A770 真机验证）
+### 5.7 FIBO 2.0 Dev（已适配并在 A770 实测）
 
 FIBO 2.0 的上游实现有两类 XPU 专用改动：
 
@@ -235,8 +235,14 @@ FIBO 2.0 的上游实现有两类 XPU 专用改动：
 
 UI 入口是 `FIBO 2.0 Dev（文生图 / 编辑训练）`，默认 `xpu_int8`、Transformer/TE
 各 100% 层级卸载；有 control 图时自动走编辑训练。A770 模板见
-`config/examples/train_lora_fibo2_xpu_a770.yaml`。首次真机验证至少应覆盖：
-模型加载、512/768 两步采样、编辑参考图、LoRA 一步反向和 checkpoint 保存。
+`config/examples/train_lora_fibo2_xpu_a770.yaml`。
+
+A770 16GB 实测覆盖了模型加载、文生图、编辑参考图、LoRA 一步反向和 checkpoint 保存：
+
+- 384 档文生图 2 步约 **8.95 s/it**，编辑 2 步约 **8.71 s/it**；
+- 采样峰值分配 **7.69GB**、峰值保留 **8.80GB**；
+- 编辑训练 1 步 **17.64 s/it**，loss **0.7477**；
+- 输出 LoRA 29.3MB、522 个张量，全部为 finite，261 个 `lora_B` 均已更新。
 
 ## 6. 曲线图与汉化 UI
 
